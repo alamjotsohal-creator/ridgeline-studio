@@ -76,6 +76,9 @@ button{cursor:pointer}
 .notice h3{margin:0;font:700 16px/1.25 var(--f-display);font-stretch:110%;text-wrap:balance}
 .notice p{margin:0;color:var(--muted);font-size:13.5px}
 .notice a{color:var(--accent);font-weight:600}
+.notice input{width:100%;border:1px solid var(--line-2);background:var(--surface);color:var(--fg);border-radius:9px;padding:9px 11px;font:500 13px var(--f-mono)}
+.hud-row{display:flex;flex-wrap:wrap;gap:6px}
+.look.g3d[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
 .notice .row{margin-top:4px}
 .fatal,.loading{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;color:#fff;font-weight:600;background:#5d7894;z-index:5}
 /* panel */
@@ -177,7 +180,7 @@ select{border:1px solid var(--line-2);background:var(--surface);border-radius:8p
   <main class="stage" id="stage">
     <canvas id="view" aria-label="3D model of the house and roof"></canvas>
     <div class="loading" id="loading">Building the 3D scene…</div>
-    <div class="hud tl"><div class="prop"><span class="eyebrow" id="propKind">Sample house</span><strong id="propName">Two-storey detached</strong></div><button type="button" class="look add" id="beforeBtn" aria-pressed="false" hidden>Show current roof</button></div>
+    <div class="hud tl"><div class="prop"><span class="eyebrow" id="propKind">Sample house</span><strong id="propName">Two-storey detached</strong></div><div class="hud-row"><button type="button" class="look add g3d" id="g3dBtn" aria-pressed="false">Add Google 3D</button><button type="button" class="look add" id="beforeBtn" aria-pressed="false" hidden>Show current roof</button></div></div>
     <div class="hud tr seg" role="group" aria-label="Camera view">
       <button type="button" data-view="orbit" aria-pressed="true">3D</button>
       <button type="button" data-view="front" aria-pressed="false">Front</button>
@@ -191,6 +194,13 @@ select{border:1px solid var(--line-2);background:var(--surface);border-radius:8p
       <p>Claude’s preview window can’t reach map services. The full version at <a href="https://alamjotsohal-creator.github.io/ridgeline-studio/" target="_blank" rel="noopener">alamjotsohal-creator.github.io/ridgeline-studio</a> loads any address with its real outline and satellite imagery, in any browser.</p>
       <p>Here you can still match a house: upload a satellite screenshot of the property, then size the house sections over it.</p>
       <div class="row"><button class="btn primary sm" type="button" data-act="upload">Upload a screenshot</button><button class="btn sm" type="button" data-act="close">Keep the sample house</button></div>
+    </div>
+    <div class="notice" id="keyDlg" hidden role="dialog" aria-labelledby="keyH">
+      <h3 id="keyH">Turn on Google 3D</h3>
+      <p>Paste your Cesium ion access token, or a Google Maps API key with the Map Tiles API turned on. It stays in this browser only.</p>
+      <label class="sr" for="keyIn">Access token or API key</label>
+      <input id="keyIn" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token or key">
+      <div class="row"><button class="btn primary sm" type="button" id="keySave">Save and load the house</button><button class="btn sm" type="button" id="keyCancel">Not now</button><button class="link danger" type="button" id="keyClear" hidden>Remove saved key</button></div>
     </div>
   </main>
 
@@ -249,6 +259,7 @@ select{border:1px solid var(--line-2);background:var(--surface);border-radius:8p
             <button class="btn sm" type="button" id="photoBtn">Upload satellite screenshot</button>
             <input type="file" id="photoIn" accept="image/*" hidden>
             <button class="btn sm" type="button" id="resetSample">Back to sample house</button>
+            <button class="btn sm" type="button" id="keyBtn">Google 3D key</button>
           </div>
           <div class="grid2" id="photoCtls" hidden><div class="ctl" id="cPhotoW"></div><div class="ctl" id="cPhotoR"></div></div>
           <div id="alignCtls" hidden><p class="hint">Satellite photos are shot at a slight angle, so roofs can sit a few metres off their footprint. Nudge the photo until the roof lines up.</p><div class="grid2"><div class="ctl" id="cImgX"></div><div class="ctl" id="cImgZ"></div></div></div>
@@ -279,15 +290,16 @@ select{border:1px solid var(--line-2);background:var(--surface);border-radius:8p
   </aside>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
-<script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/","3d-tiles-renderer":"https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.5.3/build/index.js","3d-tiles-renderer/plugins":"https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.5.3/build/index.plugins.js"}}</script>
+<script>setTimeout(function(){if(!window.__ridgeline){var l=document.getElementById('loading');if(l){l.hidden=false;l.textContent='The 3D engine could not load. Check the connection and reload the page.'}}},25000)</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 (function(){
 'use strict';
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const stageEl=$('#stage');
-if(typeof THREE==='undefined'||!THREE.OrbitControls){$('#loading').textContent='The 3D engine could not load. Check the connection and reload the page.';return}
-THREE.ColorManagement.legacyMode=false;
 const inViewer=!!(window.claude&&window.claude.use);
 const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
@@ -354,20 +366,19 @@ const siding=()=>SIDINGS.find(s=>s.id===S.siding);
 const canvas=$('#view');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
-renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.86;
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
 const ANISO=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(38,1,.3,2000);
-const controls=new THREE.OrbitControls(camera,canvas);
+const controls=new OrbitControls(camera,canvas);
 controls.enableDamping=true;controls.dampingFactor=.09;controls.maxPolarAngle=1.49;controls.minDistance=5;controls.maxDistance=220;controls.screenSpacePanning=true;
 (function sky(){const c=mk(1024,512),g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,512);gr.addColorStop(0,'#3b6fb3');gr.addColorStop(.36,'#86b1dc');gr.addColorStop(.497,'#e2ebf1');gr.addColorStop(.52,'#9c9a8e');gr.addColorStop(1,'#6a675e');g.fillStyle=gr;g.fillRect(0,0,1024,512);
  const R=mulberry(3);for(let i=0;i<46;i++){const x=R()*1024,y=70+R()*150,r=24+R()*70;const rg=g.createRadialGradient(x,y,0,x,y,r);rg.addColorStop(0,'rgba(255,255,255,.32)');rg.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=rg;g.fillRect(x-r,y-r,2*r,2*r)}
- const t=new THREE.CanvasTexture(c);t.mapping=THREE.EquirectangularReflectionMapping;t.encoding=THREE.sRGBEncoding;scene.background=t;
+ const t=new THREE.CanvasTexture(c);t.mapping=THREE.EquirectangularReflectionMapping;t.colorSpace=THREE.SRGBColorSpace;scene.background=t;
  const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromEquirectangular(t).texture;pm.dispose()})();
 scene.fog=new THREE.Fog(0xd9e4ec,90,330);
-const sun=new THREE.DirectionalLight(0xffffff,2.2);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0004;sun.shadow.normalBias=.03;scene.add(sun,sun.target);
+const sun=new THREE.DirectionalLight(0xffffff,2.2*Math.PI);sun.shadow.radius=3;sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0004;sun.shadow.normalBias=.03;scene.add(sun,sun.target);
 const ctr=new THREE.Vector3();
 
 /* ---------- procedural textures ---------- */
@@ -394,7 +405,7 @@ function courses(P,N,t,R,o){const{g,hg,W,k}=P,ch=P.H/N;
    if(o.chamfer){const cc=o.chamfer*k;g.fillStyle=css(o.back);tri(g,x,y1,cc,1);tri(g,x+ww,y1,cc,-1);hg.fillStyle=gv(o.hb[1]);tri(hg,x,y1,cc,1);tri(hg,x+ww,y1,cc,-1)}
    x+=w}
   const sh=ch*o.shadow;g.fillStyle=lg(g,y0,y0+sh,'rgba(0,0,0,.55)','rgba(0,0,0,0)');g.fillRect(0,y0,W,sh)}}
-function texOf(a,W,H,srgb){const c=mk(W,H);c.getContext('2d').putImageData(new ImageData(a,W,H),0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=ANISO;if(srgb)t.encoding=THREE.sRGBEncoding;return t}
+function texOf(a,W,H,srgb){const c=mk(W,H);c.getContext('2d').putImageData(new ImageData(a,W,H),0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=ANISO;if(srgb)t.colorSpace=THREE.SRGBColorSpace;return t}
 function fin(D,o){const{W,H,col,hf}=D,R=o.R||mulberry(11),t=o.tones,b=t[0];
  for(let i=0,n=W*H;i<n;i++){const j=i*4;let f=1+(R()-.5)*o.noise;if(o.speck&&R()<o.speck)f*=R()<.5?.6:1.32;
   if(o.blend&&R()<o.blend){const q=t[(R()*t.length)|0];col[j]*=f*(q[0]+6)/(b[0]+6);col[j+1]*=f*(q[1]+6)/(b[1]+6);col[j+2]*=f*(q[2]+6)/(b[2]+6)}else{col[j]*=f;col[j+1]*=f;col[j+2]*=f}
@@ -429,7 +440,7 @@ const SGEN={
 const texCache=new Map();
 function roofTex(p,ci){const k='r'+p.id+ci;if(!texCache.has(k)){const c=p.colors[ci];texCache.set(k,GEN[p.id](c[1].map(hx),mulberry(hash(k)),c[2]))}return texCache.get(k)}
 function wallTex(s,ci){const k='w'+s.id+ci;if(!texCache.has(k)){const c=s.colors[ci];texCache.set(k,SGEN[s.id](c[1].map(hx),mulberry(hash(k))))}return texCache.get(k)}
-function simpleTex(draw,W,H,Tw,Th,srgb=true){const c=mk(W,H);draw(c.getContext('2d'),W,H);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=ANISO;if(srgb)t.encoding=THREE.sRGBEncoding;t.repeat.set(1/Tw,1/Th);return t}
+function simpleTex(draw,W,H,Tw,Th,srgb=true){const c=mk(W,H);draw(c.getContext('2d'),W,H);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=ANISO;if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.repeat.set(1/Tw,1/Th);return t}
 const noiseTex=(base,Tw)=>simpleTex((g,W,H)=>{g.fillStyle=base;g.fillRect(0,0,W,H);const R=mulberry(5);for(let i=0;i<5200;i++){const v=R()<.5?0:255;g.fillStyle=`rgba(${v},${v},${v},${.04+R()*.06})`;g.fillRect(R()*W,R()*H,1+R()*2,1+R()*2)}},256,256,Tw,Tw);
 const deckT=simpleTex((g,W,H)=>{g.fillStyle='#6f7377';g.fillRect(0,0,W,H);const R=mulberry(8);for(let i=0;i<4000;i++){const v=R()<.5?40:200;g.fillStyle=`rgba(${v},${v},${v},.08)`;g.fillRect(R()*W,R()*H,2,2)}g.fillStyle='rgba(255,255,255,.18)';g.fillRect(0,H*.47,W,4)},256,256,1.8,1.8);
 const garageT=simpleTex((g,W,H)=>{g.fillStyle='#fff';g.fillRect(0,0,W,H);g.fillStyle='rgba(0,0,0,.28)';g.fillRect(0,H-6,W,6);g.fillStyle='rgba(0,0,0,.1)';g.fillRect(W-4,0,4,H);g.strokeStyle='rgba(0,0,0,.12)';g.lineWidth=3;g.strokeRect(16,16,W-36,H-40)},128,128,1.1,.56);
@@ -535,10 +546,10 @@ function buildHouse(){
  for(const grp of[house,pickers])grp.children.slice().forEach(m=>{grp.remove(m);m.geometry.dispose()});
  const B=new Builder();stats={area:0,deck:0,ridge:0,hip:0,eave:0,rake:0,flash:0};
  S.wings.forEach((w,i)=>addWing(B,w,i,stats));
- for(const k in B.b){const b=B.b[k];if(!b.p.length)continue;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.n,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(b.u,2));const m=new THREE.Mesh(g,MATS[k]);m.castShadow=k!=='glass';m.receiveShadow=true;house.add(m)}
+ for(const k in B.b){const b=B.b[k];if(!b.p.length)continue;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.n,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(b.u,2));const m=new THREE.Mesh(g,MATS[k]);m.userData.k=k;m.castShadow=k!=='glass';m.receiveShadow=true;house.add(m)}
  S.wings.forEach((w,i)=>{const top=w.h+Math.min(w.l,w.w)/2*w.pitch/12+.4,m=new THREE.Mesh(new THREE.BoxGeometry(w.l+2*w.ov,top,w.w+2*w.ov),pickMat);m.position.set(w.cx,top/2,w.cz);m.rotation.y=w.rot;m.userData.i=i;pickers.add(m)});
  const w=S.wings[S.sel];if(w){outline.geometry.dispose();outline.geometry=new THREE.EdgesGeometry(new THREE.BoxGeometry(w.l,w.h,w.w));outline.position.set(w.cx,w.h/2,w.cz);outline.rotation.y=w.rot}
- const box=new THREE.Box3().setFromObject(house),sph=box.getBoundingSphere(new THREE.Sphere());ctr.copy(sph.center);const r=Math.max(10,sph.radius+4),sc2=sun.shadow.camera;sc2.left=sc2.bottom=-r;sc2.right=sc2.top=r;sc2.near=1;sc2.far=200;sc2.updateProjectionMatrix();setSun()}
+ const box=new THREE.Box3().setFromObject(house),sph=box.getBoundingSphere(new THREE.Sphere());ctr.copy(sph.center);const r=Math.max(10,sph.radius+4),sc2=sun.shadow.camera;sc2.left=sc2.bottom=-r;sc2.right=sc2.top=r;sc2.near=1;sc2.far=200;sc2.updateProjectionMatrix();setSun();applyModeVis();updateClip()}
 let rbq=0;function rebuild(){if(!rbq)rbq=requestAnimationFrame(()=>{rbq=0;buildHouse();updateQuote();renderWingList();renderWarn()})}
 
 /* ---------- site & ground ---------- */
@@ -552,8 +563,8 @@ const trunkM=new THREE.MeshStandardMaterial({color:0x5b4636,roughness:1}),leafM=
 function tree(x,z,s){const g=new THREE.Group(),t=new THREE.Mesh(new THREE.CylinderGeometry(.16*s,.24*s,2.6*s,7),trunkM);t.position.y=1.3*s;g.add(t);const R=mulberry(hash(x+','+z));
  for(let i=0;i<3;i++){const geo=new THREE.IcosahedronGeometry((1.6+R()*.7)*s,1),p=geo.attributes.position;for(let j=0;j<p.count;j++)p.setXYZ(j,p.getX(j)*(1+(R()-.5)*.25),p.getY(j)*(1+(R()-.5)*.25),p.getZ(j)*(1+(R()-.5)*.25));geo.computeVertexNormals();const m=new THREE.Mesh(geo,leafM);m.position.set((R()-.5)*1.6*s,(3.2+R()*1.4)*s,(R()-.5)*1.6*s);g.add(m)}
  g.traverse(n=>{n.castShadow=n.receiveShadow=!!n.isMesh});g.position.set(x,0,z);site.add(g)}
-function sampleSite(){clearSite();flat(320,320,grassM,0,0,0);flat(5.6,10.6,concM,8.7,10.3,.02);flat(320,1.6,concM,0,15.9,.02);flat(320,7.2,asphM,0,20.3,.015);flat(1.3,10.3,concM,1.6,10.45,.018);tree(-12,-5,1.1);tree(15.5,-8,1.25);tree(-10,11,.95);tree(19,9,.8);S.ground='lawn';$('#attrib').hidden=true}
-function groundImage(src,w,h,x,z,rotDeg,order=-3){const t=new THREE.CanvasTexture(src);t.encoding=THREE.sRGBEncoding;t.anisotropy=ANISO;const m=new THREE.MeshBasicMaterial({map:t,toneMapped:false,depthWrite:false});m.userData.own=1;const p=new THREE.Mesh(new THREE.PlaneGeometry(1,1),m);p.scale.set(w,h,1);p.rotation.x=-Math.PI/2;p.rotation.z=rotDeg*Math.PI/180;p.position.set(x,.01,z);p.renderOrder=order;site.add(p);return p}
+function sampleSite(){stopTiles();if(typeof setMode==='function'&&S.mode)setMode('lawn');clearSite();flat(320,320,grassM,0,0,0);flat(5.6,10.6,concM,8.7,10.3,.02);flat(320,1.6,concM,0,15.9,.02);flat(320,7.2,asphM,0,20.3,.015);flat(1.3,10.3,concM,1.6,10.45,.018);tree(-12,-5,1.1);tree(15.5,-8,1.25);tree(-10,11,.95);tree(19,9,.8);S.ground='lawn';$('#attrib').hidden=true}
+function groundImage(src,w,h,x,z,rotDeg,order=-3){const t=new THREE.CanvasTexture(src);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=ANISO;const m=new THREE.MeshBasicMaterial({map:t,toneMapped:false,depthWrite:false});m.userData.own=1;const p=new THREE.Mesh(new THREE.PlaneGeometry(1,1),m);p.scale.set(w,h,1);p.rotation.x=-Math.PI/2;p.rotation.z=rotDeg*Math.PI/180;p.position.set(x,.01,z);p.renderOrder=order;site.add(p);return p}
 function shadowCatcher(size,x,z){const m=new THREE.ShadowMaterial({opacity:.38,depthWrite:false});m.userData.own=1;const p=new THREE.Mesh(new THREE.PlaneGeometry(size,size),m);p.rotation.x=-Math.PI/2;p.position.set(x,.02,z);p.receiveShadow=true;p.renderOrder=-1;site.add(p)}
 let photoPlane=null;
 function placePhoto(){if(!S.photo)return;if(!photoPlane){clearSite();photoPlane=groundImage(S.photo,1,1,0,0,0);shadowCatcher(400,0,0)}const asp=S.photo.height/S.photo.width;photoPlane.scale.set(S.photoW,S.photoW*asp,1);photoPlane.rotation.z=S.photoR*Math.PI/180}
@@ -561,7 +572,7 @@ function placePhoto(){if(!S.photo)return;if(!photoPlane){clearSite();photoPlane=
 /* ---------- light ---------- */
 function setSun(){const t=S.time,az=(12-t)/6*Math.PI/2*.95,el=Math.max(.07,Math.sin(Math.PI*(t-5.5)/15)*1.05),d=80;
  sun.position.set(ctr.x+d*Math.cos(el)*Math.sin(az),d*Math.sin(el),ctr.z+d*Math.cos(el)*Math.cos(az));sun.target.position.copy(ctr);
- const warm=clamp(1-el/.55,0,1);sun.color.setRGB(1,1-.22*warm,1-.48*warm);sun.intensity=2.3*(.4+.6*Math.min(1,el/.45))}
+ const warm=clamp(1-el/.55,0,1);sun.color.setRGB(1,1-.22*warm,1-.48*warm);sun.intensity=2.3*Math.PI*(.4+.6*Math.min(1,el/.45))}
 
 /* ---------- camera ---------- */
 let tw=null;
@@ -577,6 +588,7 @@ new ResizeObserver(resize).observe(stageEl);
 let shown=false;
 function loop(now){requestAnimationFrame(loop);if(document.hidden)return;
  if(tw){const k=Math.min(1,(now-tw.s)/650),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;camera.position.lerpVectors(tw.p0,tw.p1,e);controls.target.lerpVectors(tw.t0,tw.t1,e);if(k>=1)tw=null}
+ if(tiles){camera.updateMatrixWorld();tiles.setResolutionFromRenderer(camera,renderer);tiles.update();if(S.mode==='g3d'&&now-attrT>1200){attrT=now;const a=tiles.getAttributions([]).filter(x=>x.type==='string').map(x=>x.value).join(' · ');$('#attrib').textContent='Google'+(a?' · '+a:'')}}
  controls.update();outline.visible=house.visible&&S.wings.length>0&&(S.tab==='house'||now<flashUntil);renderer.render(scene,camera);
  if(!shown){shown=true;$('#loading').hidden=true}}
 
@@ -638,12 +650,12 @@ function toWings(pts,tags){
  return rects.map((r,k)=>{const du=r.w*cs,dv=r.h*cs,cu=u0+(r.i+r.w/2)*cs,cv=v0+(r.j+r.h/2)*cs,small=k>0&&du*dv<45,L=Math.max(du,dv),Wd=Math.min(du,dv);
   return{name:k?(small?'Garage / addition':'Section '+(k+1)):'Main house',cx:cu*c-cv*s,cz:cu*s+cv*c,rot:du>=dv?-ang:-ang-Math.PI/2,l:L,w:Wd,h:small?3:hMain,style:tagStyle||(area>600?'flat':(!k&&L/Wd<1.35?'hip':'gable')),pitch:small?5:6,ov:.4,door:k?undefined:'pz'}})}
 const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer';
-async function tiles(z,x0,y0,N){const cv=mk(N*256,N*256),g=cv.getContext('2d');g.fillStyle='#6f7a5e';g.fillRect(0,0,cv.width,cv.height);let ok=0;
+async function stitch(z,x0,y0,N){const cv=mk(N*256,N*256),g=cv.getContext('2d');g.fillStyle='#6f7a5e';g.fillRect(0,0,cv.width,cv.height);let ok=0;
  await Promise.all(Array.from({length:N*N},(_,i)=>new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>{g.drawImage(im,(i%N)*256,((i/N)|0)*256);ok++;res()};im.onerror=()=>res();im.src=`${ESRI}/tile/${z}/${y0+((i/N)|0)}/${x0+i%N}`})));return ok?cv:null}
 async function imagery(lat,lon){
  const lr=lat*Math.PI/180,layer=async(z,N,lift)=>{const n=2**z,xt=(lon+180)/360*n,yt=(1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n,x0=Math.floor(xt)-(N>>1),y0=Math.floor(yt)-(N>>1);
   if(lift){const tm=await getJSON(`${ESRI}/tilemap/${z}/${y0}/${x0}/${N}/${N}?f=json`,6000);if(!tm||tm.adjusted||!Array.isArray(tm.data)||tm.data.length!==N*N||tm.data.some(v=>v!==1))return null}
-  const cv=await tiles(z,x0,y0,N);if(!cv)return null;const mpp=156543.03392*Math.cos(lr)/n;return{canvas:cv,size:N*256*mpp,ox:(N*128-(xt-x0)*256)*mpp,oz:(N*128-(yt-y0)*256)*mpp}};
+  const cv=await stitch(z,x0,y0,N);if(!cv)return null;const mpp=156543.03392*Math.cos(lr)/n;return{canvas:cv,size:N*256*mpp,ox:(N*128-(xt-x0)*256)*mpp,oz:(N*128-(yt-y0)*256)*mpp}};
  const base=await layer(19,5,0);if(!base)return null;let detail=null;try{detail=await layer(20,4,1)}catch(e){}
  return{base,detail}}
 async function loadAddress(q){
@@ -656,13 +668,76 @@ async function loadAddress(q){
   toast('Loading the building outline…',0);let fp=null;try{fp=await footprint(geo.lat,geo.lon)}catch(e){}
   let wings=fp?toWings(fp.pts,fp.tags):null,note='';
   if(!wings||!wings.length){wings=[{name:'Main house',cx:0,cz:0,rot:0,l:12,w:9,h:5.6,style:'gable',pitch:6,ov:.4,door:'pz'}];note='No building outline on file here, so a standard house was placed. Adjust it under House.'}
-  toast('Loading satellite imagery…',0);let img=null;try{img=await imagery(geo.lat,geo.lon)}catch(e){}
-  S.wings=wings;S.sel=0;S.label=geo.label;S.photo=null;clearSite();
-  if(img){const b=img.base;groundImage(b.canvas,b.size,b.size,b.ox,b.oz,0,-3);if(img.detail){const d=img.detail;groundImage(d.canvas,d.size,d.size,d.ox,d.oz,0,-2)}shadowCatcher(b.size,b.ox,b.oz);S.ground='sat';S.hiRes=!!img.detail}else{flat(320,320,grassM,0,0,0);S.ground='lawn'}
-  S.fp=!!fp;$('#attrib').hidden=!img;setBefore(false);buildHouse();fitView('orbit');refreshAll();
+  S.wings=wings;S.sel=0;S.label=geo.label;S.photo=null;S.fp=!!fp;clearSite();stopTiles();let g3=false;
+  if(store.get('key3d','')&&S.g3d!==false){toast('Loading Google 3D…',0);const r=await startTiles(geo.lat,geo.lon);
+   if(r.ok){toast('Measuring the roof…',0);await fitToTiles();g3=true;S.ground='g3d';$('#attrib').hidden=false}
+   else{setMode('sat');note=r.why==='auth'?'Google 3D didn’t accept your key, so this is the satellite view. Check the key under House → Google 3D key.':'Google 3D didn’t load, so this is the satellite view.'}}
+  if(!g3){setMode('sat');toast('Loading satellite imagery…',0);let img=null;try{img=await imagery(geo.lat,geo.lon)}catch(e){}
+   if(img){const b=img.base;groundImage(b.canvas,b.size,b.size,b.ox,b.oz,0,-3);if(img.detail){const d=img.detail;groundImage(d.canvas,d.size,d.size,d.ox,d.oz,0,-2)}shadowCatcher(b.size,b.ox,b.oz);S.ground='sat';S.hiRes=!!img.detail}else{flat(320,320,grassM,0,0,0);S.ground='lawn'}
+   $('#attrib').hidden=!img}
+  setBefore(false);buildHouse();fitView('orbit');refreshAll();
   toast(note||'Loaded '+geo.label,note?6500:2800);
  }catch(e){toast('The map service didn’t respond. Check the connection and try again.')}
  finally{busy=false;$('#addrGo').disabled=false}}
+
+/* ---------- Google photorealistic 3D ---------- */
+const DRACO='https://www.gstatic.com/draco/versioned/decoders/1.5.7/',D2R=Math.PI/180;
+const tilesRoot=new THREE.Group();tilesRoot.rotation.y=Math.PI;tilesRoot.visible=false;scene.add(tilesRoot);
+let tiles=null,attrT=0;const attribDefault=$('#attrib').textContent;
+const clipU={uRects:{value:Array.from({length:6},()=>new THREE.Vector4())},uDims:{value:Array.from({length:6},()=>new THREE.Vector4())},uCount:{value:0}};
+function patchMat(m){if(!m||m.userData.rl)return;m.userData.rl=1;m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,clipU);
+ sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vRLW;').replace('#include <begin_vertex>','#include <begin_vertex>\nvRLW=(modelMatrix*vec4(transformed,1.0)).xyz;');
+ sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vRLW;uniform vec4 uRects[6];uniform vec4 uDims[6];uniform int uCount;').replace('void main() {','void main() {\n for(int i=0;i<6;i++){if(i>=uCount)break;vec2 d=vRLW.xz-uRects[i].xy;vec2 l=vec2(d.x*uRects[i].z-d.y*uRects[i].w,d.x*uRects[i].w+d.y*uRects[i].z);if(abs(l.x)<uDims[i].x&&abs(l.y)<uDims[i].y&&vRLW.y>uDims[i].z)discard;}')};
+ m.customProgramCacheKey=()=>'rl-clip';m.needsUpdate=true}
+function updateClip(){let n=0;if(S.mode==='g3d'&&house.visible)for(const w of S.wings){if(n>=6)break;clipU.uRects.value[n].set(w.cx,w.cz,Math.cos(w.rot),Math.sin(w.rot));clipU.uDims.value[n].set(w.l/2-.25,w.w/2-.25,w.h-.35,0);n++}clipU.uCount.value=n}
+function stopTiles(){if(tiles){tilesRoot.remove(tiles.group);try{tiles.dispose()}catch(e){}tiles=null}clipU.uCount.value=0}
+const rc=new THREE.Raycaster(),DOWN=new THREE.Vector3(0,-1,0);
+function hitY(x,z){tilesRoot.updateMatrixWorld(true);rc.set(new THREE.Vector3(x,4000,z),DOWN);rc.far=9000;const h=rc.intersectObject(tilesRoot,true)[0];return h?h.point.y:null}
+function idle(ms,bail){return new Promise(res=>{const s0=performance.now();let quiet=0,seen=false;const tick=()=>{const t=tiles;if(!t||bail())return res(false);const el=performance.now()-s0,st=t.stats;if(t.isLoading||st.queued||st.downloading||st.parsing){seen=true;quiet=0}else quiet++;if(t.root&&((seen&&quiet>=3)||(quiet>=12&&st.inCache>0))&&el>800)return res(true);if(el>ms)return res(!!t.root);setTimeout(tick,250)};setTimeout(tick,250)})}
+async function startTiles(lat,lon){
+ stopTiles();const key=store.get('key3d','');if(!key)return{ok:false,why:'nokey'};
+ let TR,P;try{[TR,P]=await Promise.all([import('3d-tiles-renderer'),import('3d-tiles-renderer/plugins')])}catch(e){return{ok:false,why:'lib'}}
+ const t=new TR.TilesRenderer();
+ if(/^eyJ/.test(key))t.registerPlugin(new P.CesiumIonAuthPlugin({apiToken:key,assetId:'2275207',autoRefreshToken:true}));else t.registerPlugin(new P.GoogleCloudAuthPlugin({apiToken:key,autoRefreshToken:true}));
+ t.registerPlugin(new P.GLTFExtensionsPlugin({dracoLoader:new DRACOLoader().setDecoderPath(DRACO)}));
+ t.registerPlugin(new P.ReorientationPlugin({lat:lat*D2R,lon:lon*D2R,height:0,recenter:true}));
+ t.errorTarget=10;t.setCamera(camera);t.setResolutionFromRenderer(camera,renderer);
+ let err=null;t.addEventListener('load-error',e=>{if(!e.tile)err=e.error||new Error('root tileset')});
+ t.addEventListener('load-model',e=>e.scene.traverse(o=>{if(o.material)[].concat(o.material).forEach(patchMat)}));
+ tilesRoot.position.set(0,0,0);tilesRoot.add(t.group);tiles=t;setMode('g3d');
+ tw=null;controls.maxDistance=4000;camera.position.set(0,1400,1);controls.target.set(0,0,0);controls.update();
+ await idle(25000,()=>!!err);
+ if(err||!t.root){stopTiles();controls.maxDistance=220;return{ok:false,why:'auth',err:String(err&&err.message||err)}}
+ let g=null;for(let i=0;i<4&&g==null;i++){g=hitY(0,0);if(g==null){const r=[[25,0],[-25,0],[0,25],[0,-25]].map(([x,z])=>hitY(x,z)).filter(v=>v!=null);if(r.length)g=Math.min(...r);else await idle(8000,()=>false)}}
+ if(g==null){stopTiles();controls.maxDistance=220;return{ok:false,why:'empty'}}
+ tilesRoot.position.y=-g;return{ok:true}}
+function wingBox(){let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;for(const w of S.wings){const r=Math.hypot(w.l,w.w)/2;x0=Math.min(x0,w.cx-r);x1=Math.max(x1,w.cx+r);z0=Math.min(z0,w.cz-r);z1=Math.max(z1,w.cz+r)}return{cx:(x0+x1)/2,cz:(z0+z1)/2,r:Math.max(8,Math.hypot(x1-x0,z1-z0)/2)}}
+async function fitToTiles(){
+ const b=wingBox();camera.position.set(b.cx+b.r*1.3,b.r*1.2+25,b.cz+b.r*1.7);controls.target.set(b.cx,0,b.cz);controls.update();
+ await idle(16000,()=>false);
+ const ring=[];for(let i=0;i<16;i++){const a=i/16*Math.PI*2,y=hitY(b.cx+Math.cos(a)*(b.r+5),b.cz+Math.sin(a)*(b.r+5));if(y!=null)ring.push(y)}
+ if(ring.length){ring.sort((p,q)=>p-q);tilesRoot.position.y-=ring[Math.floor(ring.length*.25)]}
+ S.fitted=0;for(const w of S.wings)if(fitWing(w))S.fitted++;controls.maxDistance=220}
+function fitWing(w){
+ let L=w.l,Wd=w.w,rot=w.rot;if(Wd>L){[L,Wd]=[Wd,L];rot+=Math.PI/2}
+ const c=Math.cos(rot),s=Math.sin(rot),Y=(x,z)=>hitY(w.cx+x*c+z*s,w.cz-x*s+z*c),ok=v=>v!=null&&v>1.5&&v<45;
+ const ridge=[Y(-L/4,0),Y(0,0),Y(L/4,0)].filter(ok);if(!ridge.length)return false;const yr=Math.max(...ridge);
+ const ins=Math.min(1,Wd*.15),side=[Y(0,Wd/2-ins),Y(0,ins-Wd/2),Y(-L/4,Wd/2-ins),Y(L/4,ins-Wd/2)].filter(ok);if(!side.length){w.style='flat';w.h=clamp(yr-.1,2.4,45);return true}
+ side.sort((p,q)=>p-q);const ys=side[Math.floor((side.length-1)/2)],t=Math.min(1,(yr-ys)/Math.max(.5,Wd/2-ins));
+ if(yr<2)return false;
+ if(t<.12){w.style='flat';w.h=clamp(yr-.1,2.4,45);return true}
+ w.h=clamp(ys-ins*t,2.4,45);w.pitch=clamp(Math.round(t*24)/2,3,14);
+ const ends=[Y(L/2-1.2,0),Y(1.2-L/2,0)].filter(ok);
+ if(!['mansard','gambrel','dutch'].includes(w.style))w.style=ends.length&&(yr-Math.max(...ends))<.8?'gable':'hip';return true}
+function setMode(m){S.mode=m;const g=m==='g3d';far.visible=!g;site.visible=!g;tilesRoot.visible=g;house.position.y=g?.12:0;scene.fog.near=g?350:90;scene.fog.far=g?2600:330;if(!g)$('#attrib').textContent=attribDefault;applyModeVis();updateClip();updateG3dBtn()}
+function applyModeVis(){const g=S.mode==='g3d';house.children.forEach(m=>{m.visible=!g||['roof','deck','trim','soffit'].includes(m.userData.k)})}
+function updateG3dBtn(){const b=$('#g3dBtn'),k=!!store.get('key3d','');b.setAttribute('aria-pressed',String(S.mode==='g3d'));b.textContent=!k?'Add Google 3D':S.mode==='g3d'?'Google 3D: on':'Google 3D: off'}
+function openKeyDlg(){$('#notice').hidden=true;$('#keyIn').value='';$('#keyClear').hidden=!store.get('key3d','');$('#keyDlg').hidden=false;setTimeout(()=>$('#keyIn').focus(),50)}
+$('#g3dBtn').addEventListener('click',()=>{if(!store.get('key3d','')){openKeyDlg();return}S.g3d=S.mode!=='g3d';const q=$('#addr').value.trim();if(S.label&&q)loadAddress(q);else{updateG3dBtn();toast(S.g3d?'Load an address to see it in Google 3D':'Google 3D is off')}});
+$('#keyBtn').addEventListener('click',openKeyDlg);
+$('#keyCancel').addEventListener('click',()=>{$('#keyDlg').hidden=true});
+$('#keyClear').addEventListener('click',()=>{store.set('key3d','');S.g3d=false;$('#keyDlg').hidden=true;updateG3dBtn();toast('Key removed from this browser')});
+$('#keySave').addEventListener('click',()=>{const v=$('#keyIn').value.trim();if(v.length<20){toast('That looks too short. Paste the whole token or key.');return}store.set('key3d',v);S.g3d=true;$('#keyDlg').hidden=true;updateG3dBtn();const q=$('#addr').value.trim();if(q)loadAddress(q)});
 
 /* ---------- UI ---------- */
 let toastT=0;function toast(msg,ms=2600){const el=$('#toast');clearTimeout(toastT);if(!msg){el.hidden=true;return}el.textContent=msg;el.hidden=false;if(ms)toastT=setTimeout(()=>el.hidden=true,ms)}
@@ -718,9 +793,9 @@ const CTLS=[
  ctl('cImgZ',{label:'Shift photo north–south',min:-12,max:12,step:.1,get:()=>S.imgZ||0,set:v=>{S.imgZ=v;site.position.z=v},fmt:v=>`${v.toFixed(1)} m`})];
 const syncCtls=()=>CTLS.forEach(c=>c.sync());
 function selectWing(i){S.sel=clamp(i,0,S.wings.length-1);buildHouse();renderWingSel();renderWingList();renderStyles();syncCtls()}
-function setBefore(on){house.visible=!on;const b=$('#beforeBtn');b.hidden=!(S.ground==='sat'||S.photo);$('#alignCtls').hidden=b.hidden;b.setAttribute('aria-pressed',String(on));b.textContent=on?'Show new roof':'Show current roof'}
+function setBefore(on){house.visible=!on;updateClip();const b=$('#beforeBtn');b.hidden=!(S.ground==='sat'||S.photo||S.mode==='g3d');$('#alignCtls').hidden=b.hidden||S.mode==='g3d';b.setAttribute('aria-pressed',String(on));b.textContent=on?'Show new roof':'Show current roof'}
 $('#beforeBtn').addEventListener('click',()=>{const on=house.visible;setBefore(on);toast(on?'Satellite photo of the current roof':'New roof');if(on)fitView('top')});
-function updateProp(){if(S.label){$('#propKind').textContent=S.ground==='sat'?'Customer property · satellite':'Customer property';$('#propName').textContent=S.label}else{$('#propKind').textContent=S.photo?'Matched from a photo':'Sample house';$('#propName').textContent=S.photo?'Your uploaded satellite view':'Two-storey detached with garage'}}
+function updateProp(){if(S.label){$('#propKind').textContent=S.mode==='g3d'?'Customer property · Google 3D':S.ground==='sat'?'Customer property · satellite':'Customer property';$('#propName').textContent=S.label}else{$('#propKind').textContent=S.photo?'Matched from a photo':'Sample house';$('#propName').textContent=S.photo?'Your uploaded satellite view':'Two-storey detached with garage'}}
 function refreshAll(){renderGroups();renderProducts();renderSwatches();renderStyles();renderWingSel();renderWingList();renderWalls();renderWarn();updateQuote();renderLooks();syncCtls();updateProp()}
 
 /* events */
@@ -747,7 +822,7 @@ $('#rateIn').addEventListener('change',e=>{const v=parseFloat(e.target.value);if
 $('#rateReset').addEventListener('click',()=>{delete S.rates[S.product];store.set('rates',S.rates);updateQuote()});
 $('#photoBtn').addEventListener('click',()=>$('#photoIn').click());
 $('#notice').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;$('#notice').hidden=true;if(b.dataset.act==='upload')$('#photoIn').click()});
-$('#photoIn').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const url=URL.createObjectURL(f),im=new Image();im.onload=()=>{const s=Math.min(1,2048/Math.max(im.width,im.height)),c=mk(Math.round(im.width*s),Math.round(im.height*s));c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);S.photo=c;S.label=null;S.ground='photo';photoPlane=null;placePhoto();setBefore(false);$('#photoCtls').hidden=false;$('#attrib').hidden=true;updateProp();fitView('top');toast('Photo placed. Set its width so the house matches, then line up the sections.',5000)};im.onerror=()=>toast('That file isn’t an image this browser can open. Try a PNG or JPG.');im.src=url;e.target.value=''});
+$('#photoIn').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const url=URL.createObjectURL(f),im=new Image();im.onload=()=>{const s=Math.min(1,2048/Math.max(im.width,im.height)),c=mk(Math.round(im.width*s),Math.round(im.height*s));c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);stopTiles();setMode('photo');S.photo=c;S.label=null;S.ground='photo';photoPlane=null;placePhoto();setBefore(false);$('#photoCtls').hidden=false;$('#attrib').hidden=true;updateProp();fitView('top');toast('Photo placed. Set its width so the house matches, then line up the sections.',5000)};im.onerror=()=>toast('That file isn’t an image this browser can open. Try a PNG or JPG.');im.src=url;e.target.value=''});
 $('#resetSample').addEventListener('click',()=>{S.wings=sampleWings();S.sel=0;S.label=null;S.photo=null;$('#photoCtls').hidden=true;sampleSite();setBefore(false);buildHouse();fitView('orbit');refreshAll()});
 $('#snapBtn').addEventListener('click',snapshot);
 async function snapshot(){
@@ -759,10 +834,10 @@ async function snapshot(){
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast('Image downloaded')}
 
 /* ---------- start ---------- */
-applyRoof();applyWalls();applyTrim();sampleSite();resize();buildHouse();fitView('orbit',true);refreshAll();requestAnimationFrame(loop);
+S.mode='lawn';applyRoof();applyWalls();applyTrim();sampleSite();updateG3dBtn();resize();buildHouse();fitView('orbit',true);refreshAll();requestAnimationFrame(loop);
 const qp=new URLSearchParams(location.search),qa=qp.get('a')||qp.get('address');
 if(qa&&!inViewer){$('#addr').value=qa;setTimeout(()=>loadAddress(qa),250)}
-window.__ridgeline={S,loadAddress,buildHouse,stats:()=>stats,fitView,selectWing,applyLook};
+window.__ridgeline={S,loadAddress,buildHouse,stats:()=>stats,fitView,selectWing,applyLook,tiles:()=>tiles,hitY,clip:()=>clipU.uCount.value};
 })();
 </script>
 
