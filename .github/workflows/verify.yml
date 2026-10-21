@@ -1,0 +1,32 @@
+name: verify-live-site
+on:
+  push:
+    branches: [verify]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Wait for the Pages site
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://alamjotsohal-creator.github.io/ridgeline-studio/)
+            echo "attempt $i: $code"; [ "$code" = "200" ] && break; sleep 10
+          done
+      - name: Install browser
+        run: npm i playwright@1.48.2 && npx playwright install --with-deps chromium
+      - name: Run live check
+        run: node verify.mjs
+      - name: Save results to verify-results branch
+        if: always()
+        run: |
+          mkdir -p out && cd out
+          git init -q && git checkout -q -b verify-results
+          git add -A && git -c user.name=verify-bot -c user.email=verify-bot@users.noreply.github.com commit -q -m "results ${{ github.run_id }}" || true
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" verify-results
