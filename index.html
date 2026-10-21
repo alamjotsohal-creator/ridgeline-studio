@@ -540,7 +540,7 @@ let rbq=0;function rebuild(){if(!rbq)rbq=requestAnimationFrame(()=>{rbq=0;buildH
 
 /* ---------- site & ground ---------- */
 const site=new THREE.Group();scene.add(site);
-const far=new THREE.Mesh(new THREE.CircleGeometry(900,48),new THREE.MeshStandardMaterial({color:0x4f6237,roughness:1}));far.rotation.x=-Math.PI/2;far.position.y=-.04;far.receiveShadow=true;scene.add(far);
+const far=new THREE.Mesh(new THREE.CircleGeometry(900,48),new THREE.MeshStandardMaterial({color:0x4f6237,roughness:1}));far.rotation.x=-Math.PI/2;far.position.y=-.04;far.receiveShadow=true;far.renderOrder=-4;scene.add(far);
 const mUV=(g,sx,sy)=>{const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*sx,uv.getY(i)*sy);return g};
 function flat(w,h,mat,x,z,y=0){const m=new THREE.Mesh(mUV(new THREE.PlaneGeometry(w,h),w,h),mat);m.rotation.x=-Math.PI/2;m.position.set(x,y,z);m.receiveShadow=true;site.add(m);return m}
 function clearSite(){site.children.slice().forEach(o=>{site.remove(o);o.traverse(n=>{if(n.geometry)n.geometry.dispose();if(n.material&&n.material.userData.own){n.material.map&&n.material.map.dispose();n.material.dispose()}})});photoPlane=null}
@@ -550,9 +550,10 @@ function tree(x,z,s){const g=new THREE.Group(),t=new THREE.Mesh(new THREE.Cylind
  for(let i=0;i<3;i++){const geo=new THREE.IcosahedronGeometry((1.6+R()*.7)*s,1),p=geo.attributes.position;for(let j=0;j<p.count;j++)p.setXYZ(j,p.getX(j)*(1+(R()-.5)*.25),p.getY(j)*(1+(R()-.5)*.25),p.getZ(j)*(1+(R()-.5)*.25));geo.computeVertexNormals();const m=new THREE.Mesh(geo,leafM);m.position.set((R()-.5)*1.6*s,(3.2+R()*1.4)*s,(R()-.5)*1.6*s);g.add(m)}
  g.traverse(n=>{n.castShadow=n.receiveShadow=!!n.isMesh});g.position.set(x,0,z);site.add(g)}
 function sampleSite(){clearSite();flat(320,320,grassM,0,0,0);flat(5.6,10.6,concM,8.7,10.3,.02);flat(320,1.6,concM,0,15.9,.02);flat(320,7.2,asphM,0,20.3,.015);flat(1.3,10.3,concM,1.6,10.45,.018);tree(-12,-5,1.1);tree(15.5,-8,1.25);tree(-10,11,.95);tree(19,9,.8);S.ground='lawn';$('#attrib').hidden=true}
-function groundImage(src,w,h,x,z,rotDeg){const t=new THREE.CanvasTexture(src);t.encoding=THREE.sRGBEncoding;t.anisotropy=ANISO;const m=new THREE.MeshStandardMaterial({map:t,roughness:1});m.userData.own=1;const p=new THREE.Mesh(new THREE.PlaneGeometry(1,1),m);p.scale.set(w,h,1);p.rotation.x=-Math.PI/2;p.rotation.z=rotDeg*Math.PI/180;p.position.set(x,.012,z);p.receiveShadow=true;site.add(p);return p}
+function groundImage(src,w,h,x,z,rotDeg,order=-3){const t=new THREE.CanvasTexture(src);t.encoding=THREE.sRGBEncoding;t.anisotropy=ANISO;const m=new THREE.MeshBasicMaterial({map:t,toneMapped:false,depthWrite:false});m.userData.own=1;const p=new THREE.Mesh(new THREE.PlaneGeometry(1,1),m);p.scale.set(w,h,1);p.rotation.x=-Math.PI/2;p.rotation.z=rotDeg*Math.PI/180;p.position.set(x,.01,z);p.renderOrder=order;site.add(p);return p}
+function shadowCatcher(size,x,z){const m=new THREE.ShadowMaterial({opacity:.38,depthWrite:false});m.userData.own=1;const p=new THREE.Mesh(new THREE.PlaneGeometry(size,size),m);p.rotation.x=-Math.PI/2;p.position.set(x,.02,z);p.receiveShadow=true;p.renderOrder=-1;site.add(p)}
 let photoPlane=null;
-function placePhoto(){if(!S.photo)return;if(!photoPlane){clearSite();photoPlane=groundImage(S.photo,1,1,0,0,0)}const asp=S.photo.height/S.photo.width;photoPlane.scale.set(S.photoW,S.photoW*asp,1);photoPlane.rotation.z=S.photoR*Math.PI/180}
+function placePhoto(){if(!S.photo)return;if(!photoPlane){clearSite();photoPlane=groundImage(S.photo,1,1,0,0,0);shadowCatcher(400,0,0)}const asp=S.photo.height/S.photo.width;photoPlane.scale.set(S.photoW,S.photoW*asp,1);photoPlane.rotation.z=S.photoR*Math.PI/180}
 
 /* ---------- light ---------- */
 function setSun(){const t=S.time,az=(12-t)/6*Math.PI/2*.95,el=Math.max(.07,Math.sin(Math.PI*(t-5.5)/15)*1.05),d=80;
@@ -562,7 +563,7 @@ function setSun(){const t=S.time,az=(12-t)/6*Math.PI/2*.95,el=Math.max(.07,Math.
 /* ---------- camera ---------- */
 let tw=null;
 function fitView(kind,instant){
- const box=new THREE.Box3().setFromObject(house),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),r=Math.max(7,Math.hypot(sz.x,sz.z)/2+1.5);
+ const box=new THREE.Box3().setFromObject(house),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),r=Math.max(kind==='top'?15:7,Math.hypot(sz.x,sz.z)/2+1.5);
  const vf=camera.fov*Math.PI/360,hf=Math.atan(Math.tan(vf)*camera.aspect),dist=r/Math.sin(Math.min(vf,hf))*.86;
  let az=.72,el=.36;if(kind==='top'){az=0;el=1.47}else if(kind==='front'){az=0;el=.2}
  const tg=new THREE.Vector3(c.x,kind==='top'?0:sz.y*.36,c.z),pos=new THREE.Vector3(tg.x+dist*Math.cos(el)*Math.sin(az),tg.y+dist*Math.sin(el),tg.z+dist*Math.cos(el)*Math.cos(az));
@@ -596,14 +597,19 @@ function pip(x,z,p){let ins=false;for(let i=0,j=p.length-1;i<p.length;j=i++){con
 function segD(p,a,b){const dx=b[0]-a[0],dz=b[1]-a[1],L=dx*dx+dz*dz||1,t=clamp(((p[0]-a[0])*dx+(p[1]-a[1])*dz)/L,0,1);return Math.hypot(a[0]+t*dx-p[0],a[1]+t*dz-p[1])}
 const areaOf=p=>{let s=0;for(let i=0,j=p.length-1;i<p.length;j=i++)s+=(p[j][0]-p[i][0])*(p[j][1]+p[i][1]);return Math.abs(s/2)};
 async function footprint(lat,lon){
- const q=`[out:json][timeout:20];(way["building"](around:45,${lat},${lon});relation["building"](around:45,${lat},${lon}););out geom;`;let j=null;
- for(const ep of['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter']){try{j=await getJSON(ep+'?data='+encodeURIComponent(q),22000);break}catch(e){}}
- if(!j)return null;let best=null,bd=1e9;
+ const q=`[out:json][timeout:15];(way["building"](around:45,${lat},${lon});relation["building"](around:45,${lat},${lon}););out geom;`;let j=null;
+ const ov=ep=>getJSON(ep+'?data='+encodeURIComponent(q),14000).then(r=>{if(!r||!r.elements||!r.elements.length)throw 0;return r});
+ try{j=await Promise.any(['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'].map(ov))}catch(e){}
+ if(!j){try{j=await osmMap(lat,lon)}catch(e){}}
+ if(!j)return null;S.fpSrc=j.src||'overpass';let best=null,bd=1e9;
  for(const el of j.elements||[]){let g=el.geometry;if(el.type==='relation'){const m=(el.members||[]).find(m=>m.role==='outer'&&m.geometry);g=m&&m.geometry}if(!g||g.length<4)continue;
   const pts=g.map(p=>toLocal(p.lat,p.lon,lat,lon));const f=pts[0],l=pts[pts.length-1];if(Math.hypot(f[0]-l[0],f[1]-l[1])<.01)pts.pop();if(pts.length<3)continue;
   let d;if(pip(0,0,pts))d=-areaOf(pts);else{d=1e9;for(let i=0;i<pts.length;i++)d=Math.min(d,segD([0,0],pts[i],pts[(i+1)%pts.length]))}
   if(d<bd){bd=d;best={pts,tags:el.tags||{}}}}
  return best&&bd<25?best:null}
+async function osmMap(lat,lon){const dy=.00055,dx=dy/Math.cos(lat*Math.PI/180),j=await getJSON(`https://api.openstreetmap.org/api/0.6/map.json?bbox=${(lon-dx).toFixed(6)},${(lat-dy).toFixed(6)},${(lon+dx).toFixed(6)},${(lat+dy).toFixed(6)}`,15000),nodes=new Map();
+ for(const e of j.elements||[])if(e.type==='node')nodes.set(e.id,e);
+ return{src:'osm-api',elements:(j.elements||[]).filter(e=>e.type==='way'&&e.tags&&e.tags.building&&e.nodes).map(w=>({type:'way',tags:w.tags,geometry:w.nodes.map(id=>nodes.get(id)).filter(Boolean).map(n=>({lat:n.lat,lon:n.lon}))}))}}
 function maxRect(g,nu,nv){const hg=new Int32Array(nu);let best=null;
  for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hg[i]=g[j*nu+i]?hg[i]+1:0;const st=[];
   for(let i=0;i<=nu;i++){const hh=i<nu?hg[i]:0;let start=i;while(st.length&&st[st.length-1][1]>=hh){const[si,sh]=st.pop(),A=sh*(i-si);if(sh>0&&(!best||A>best.A))best={A,i:si,w:i-si,j:j-sh+1,h:sh};start=si}st.push([start,hh])}}
@@ -625,12 +631,15 @@ function toWings(pts,tags){
  const tagStyle={gabled:'gable',hipped:'hip','half-hipped':'dutch',gambrel:'gambrel',mansard:'mansard',flat:'flat',skillion:'shed',pyramidal:'hip'}[tags['roof:shape']];
  return rects.map((r,k)=>{const du=r.w*cs,dv=r.h*cs,cu=u0+(r.i+r.w/2)*cs,cv=v0+(r.j+r.h/2)*cs,small=k>0&&du*dv<45,L=Math.max(du,dv),Wd=Math.min(du,dv);
   return{name:k?(small?'Garage / addition':'Section '+(k+1)):'Main house',cx:cu*c-cv*s,cz:cu*s+cv*c,rot:du>=dv?-ang:-ang-Math.PI/2,l:L,w:Wd,h:small?3:hMain,style:tagStyle||(area>600?'flat':(!k&&L/Wd<1.35?'hip':'gable')),pitch:small?5:6,ov:.4,door:k?undefined:'pz'}})}
+const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer';
+async function tiles(z,x0,y0,N){const cv=mk(N*256,N*256),g=cv.getContext('2d');g.fillStyle='#6f7a5e';g.fillRect(0,0,cv.width,cv.height);let ok=0;
+ await Promise.all(Array.from({length:N*N},(_,i)=>new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>{g.drawImage(im,(i%N)*256,((i/N)|0)*256);ok++;res()};im.onerror=()=>res();im.src=`${ESRI}/tile/${z}/${y0+((i/N)|0)}/${x0+i%N}`})));return ok?cv:null}
 async function imagery(lat,lon){
- const z=19,n=2**z,lr=lat*Math.PI/180,xt=(lon+180)/360*n,yt=(1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n,R=2,N=2*R+1,x0=Math.floor(xt)-R,y0=Math.floor(yt)-R,cv=mk(N*256,N*256),g=cv.getContext('2d');
- g.fillStyle='#6f7a5e';g.fillRect(0,0,cv.width,cv.height);let ok=0;
- await Promise.all(Array.from({length:N*N},(_,i)=>new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>{g.drawImage(im,(i%N)*256,((i/N)|0)*256);ok++;res()};im.onerror=()=>res();im.src=`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y0+((i/N)|0)}/${x0+i%N}`})));
- if(!ok)return null;const mpp=156543.03392*Math.cos(lr)/n,px=(xt-x0)*256,py=(yt-y0)*256;
- return{canvas:cv,size:N*256*mpp,ox:(N*128-px)*mpp,oz:(N*128-py)*mpp}}
+ const lr=lat*Math.PI/180,layer=async(z,N,lift)=>{const n=2**z,xt=(lon+180)/360*n,yt=(1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n,x0=Math.floor(xt)-(N>>1),y0=Math.floor(yt)-(N>>1);
+  if(lift){const tm=await getJSON(`${ESRI}/tilemap/${z}/${y0}/${x0}/${N}/${N}?f=json`,6000);if(!tm||tm.adjusted||!Array.isArray(tm.data)||tm.data.length!==N*N||tm.data.some(v=>v!==1))return null}
+  const cv=await tiles(z,x0,y0,N);if(!cv)return null;const mpp=156543.03392*Math.cos(lr)/n;return{canvas:cv,size:N*256*mpp,ox:(N*128-(xt-x0)*256)*mpp,oz:(N*128-(yt-y0)*256)*mpp}};
+ const base=await layer(19,5,0);if(!base)return null;let detail=null;try{detail=await layer(20,4,1)}catch(e){}
+ return{base,detail}}
 async function loadAddress(q){
  if(busy||!q.trim())return;busy=true;$('#addrGo').disabled=true;$('#notice').hidden=true;
  try{
@@ -643,7 +652,7 @@ async function loadAddress(q){
   if(!wings||!wings.length){wings=[{name:'Main house',cx:0,cz:0,rot:0,l:12,w:9,h:5.6,style:'gable',pitch:6,ov:.4,door:'pz'}];note='No building outline on file here, so a standard house was placed. Adjust it under House.'}
   toast('Loading satellite imagery…',0);let img=null;try{img=await imagery(geo.lat,geo.lon)}catch(e){}
   S.wings=wings;S.sel=0;S.label=geo.label;S.photo=null;clearSite();
-  if(img){groundImage(img.canvas,img.size,img.size,img.ox,img.oz,0);S.ground='sat'}else{flat(320,320,grassM,0,0,0);S.ground='lawn'}
+  if(img){const b=img.base;groundImage(b.canvas,b.size,b.size,b.ox,b.oz,0,-3);if(img.detail){const d=img.detail;groundImage(d.canvas,d.size,d.size,d.ox,d.oz,0,-2)}shadowCatcher(b.size,b.ox,b.oz);S.ground='sat';S.hiRes=!!img.detail}else{flat(320,320,grassM,0,0,0);S.ground='lawn'}
   S.fp=!!fp;$('#attrib').hidden=!img;setBefore(false);buildHouse();fitView('orbit');refreshAll();
   toast(note||'Loaded '+geo.label,note?6500:2800);
  }catch(e){toast('The map service didn’t respond. Check the connection and try again.')}
