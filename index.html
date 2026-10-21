@@ -249,6 +249,7 @@ select{border:1px solid var(--line-2);background:var(--surface);border-radius:8p
             <button class="btn sm" type="button" id="resetSample">Back to sample house</button>
           </div>
           <div class="grid2" id="photoCtls" hidden><div class="ctl" id="cPhotoW"></div><div class="ctl" id="cPhotoR"></div></div>
+          <div id="alignCtls" hidden><p class="hint">Satellite photos are shot at a slight angle, so roofs can sit a few metres off their footprint. Nudge the photo until the roof lines up.</p><div class="grid2"><div class="ctl" id="cImgX"></div><div class="ctl" id="cImgZ"></div></div></div>
           <p class="hint">Screenshot the satellite view of the property in your maps app, upload it here, then line the sections up with the roof in the photo. Top view helps.</p>
         </div>
       </section>
@@ -543,7 +544,7 @@ const site=new THREE.Group();scene.add(site);
 const far=new THREE.Mesh(new THREE.CircleGeometry(900,48),new THREE.MeshStandardMaterial({color:0x4f6237,roughness:1}));far.rotation.x=-Math.PI/2;far.position.y=-.04;far.receiveShadow=true;far.renderOrder=-4;scene.add(far);
 const mUV=(g,sx,sy)=>{const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*sx,uv.getY(i)*sy);return g};
 function flat(w,h,mat,x,z,y=0){const m=new THREE.Mesh(mUV(new THREE.PlaneGeometry(w,h),w,h),mat);m.rotation.x=-Math.PI/2;m.position.set(x,y,z);m.receiveShadow=true;site.add(m);return m}
-function clearSite(){site.children.slice().forEach(o=>{site.remove(o);o.traverse(n=>{if(n.geometry)n.geometry.dispose();if(n.material&&n.material.userData.own){n.material.map&&n.material.map.dispose();n.material.dispose()}})});photoPlane=null}
+function clearSite(){S.imgX=S.imgZ=0;site.position.set(0,0,0);site.children.slice().forEach(o=>{site.remove(o);o.traverse(n=>{if(n.geometry)n.geometry.dispose();if(n.material&&n.material.userData.own){n.material.map&&n.material.map.dispose();n.material.dispose()}})});photoPlane=null}
 const grassM=new THREE.MeshStandardMaterial({map:grassT,roughness:1}),concM=new THREE.MeshStandardMaterial({map:noiseTex('#a7a399',2),roughness:.95}),asphM=new THREE.MeshStandardMaterial({map:noiseTex('#4a4c4f',2),roughness:.95});
 const trunkM=new THREE.MeshStandardMaterial({color:0x5b4636,roughness:1}),leafM=new THREE.MeshStandardMaterial({color:0x4d6b34,roughness:1,flatShading:true});
 function tree(x,z,s){const g=new THREE.Group(),t=new THREE.Mesh(new THREE.CylinderGeometry(.16*s,.24*s,2.6*s,7),trunkM);t.position.y=1.3*s;g.add(t);const R=mulberry(hash(x+','+z));
@@ -599,8 +600,8 @@ const areaOf=p=>{let s=0;for(let i=0,j=p.length-1;i<p.length;j=i++)s+=(p[j][0]-p
 async function footprint(lat,lon){
  const q=`[out:json][timeout:15];(way["building"](around:45,${lat},${lon});relation["building"](around:45,${lat},${lon}););out geom;`;let j=null;
  const ov=ep=>getJSON(ep+'?data='+encodeURIComponent(q),14000).then(r=>{if(!r||!r.elements||!r.elements.length)throw 0;return r});
- try{j=await Promise.any(['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'].map(ov))}catch(e){}
- if(!j){try{j=await osmMap(lat,lon)}catch(e){}}
+ const api=()=>osmMap(lat,lon).then(r=>{if(!r.elements.length)throw 0;return r});
+ try{j=await Promise.any([...['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'].map(ov),api()])}catch(e){}
  if(!j)return null;S.fpSrc=j.src||'overpass';let best=null,bd=1e9;
  for(const el of j.elements||[]){let g=el.geometry;if(el.type==='relation'){const m=(el.members||[]).find(m=>m.role==='outer'&&m.geometry);g=m&&m.geometry}if(!g||g.length<4)continue;
   const pts=g.map(p=>toLocal(p.lat,p.lon,lat,lon));const f=pts[0],l=pts[pts.length-1];if(Math.hypot(f[0]-l[0],f[1]-l[1])<.01)pts.pop();if(pts.length<3)continue;
@@ -622,11 +623,14 @@ function toWings(pts,tags){
  const rects=[];for(let it=0;it<4;it++){const r=maxRect(grid,nu,nv);if(!r||r.A*cs*cs<(it?9:1))break;rects.push(r);for(let j=r.j;j<r.j+r.h;j++)for(let i=r.i;i<r.i+r.w;i++)grid[j*nu+i]=0}
  if(!rects.length)return null;
  const M=rects[0],ov=(a0,an,b0,bn)=>a0<b0+bn&&b0<a0+an,ext=sp=>Math.min(Math.floor(sp/2),6);
+ const fill=new Uint8Array(nu*nv);for(let j=0;j<nv;j++)for(let i=0;i<nu;i++)if(pip(u0+(i+.5)*cs,v0+(j+.5)*cs,uv))fill[j*nu+i]=1;
+ const frac=(i0,i1,j0,j1)=>{if(i0<0||j0<0||i1>nu||j1>nv)return 0;let f=0,n=0;for(let j=j0;j<j1;j++)for(let i=i0;i<i1;i++){n++;f+=fill[j*nu+i]}return n?f/n:0};
  for(const r of rects.slice(1)){
   if(r.i===M.i+M.w&&ov(r.j,r.h,M.j,M.h)){const e=ext(M.w);if(r.w+e>=r.h){r.i-=e;r.w+=e}}
   else if(r.i+r.w===M.i&&ov(r.j,r.h,M.j,M.h)){const e=ext(M.w);if(r.w+e>=r.h)r.w+=e}
   else if(r.j===M.j+M.h&&ov(r.i,r.w,M.i,M.w)){const e=ext(M.h);if(r.h+e>=r.w){r.j-=e;r.h+=e}}
   else if(r.j+r.h===M.j&&ov(r.i,r.w,M.i,M.w)){const e=ext(M.h);if(r.h+e>=r.w)r.h+=e}}
+ for(const r of rects)for(let k=0;k<4;k++){if(frac(r.i-1,r.i,r.j,r.j+r.h)>=.5){r.i--;r.w++}if(frac(r.i+r.w,r.i+r.w+1,r.j,r.j+r.h)>=.5)r.w++;if(frac(r.i,r.i+r.w,r.j-1,r.j)>=.5){r.j--;r.h++}if(frac(r.i,r.i+r.w,r.j+r.h,r.j+r.h+1)>=.5)r.h++}
  const lv=parseFloat(tags['building:levels'])||(area>70?2:1),hMain=clamp(lv*2.85,2.6,40);
  const tagStyle={gabled:'gable',hipped:'hip','half-hipped':'dutch',gambrel:'gambrel',mansard:'mansard',flat:'flat',skillion:'shed',pyramidal:'hip'}[tags['roof:shape']];
  return rects.map((r,k)=>{const du=r.w*cs,dv=r.h*cs,cu=u0+(r.i+r.w/2)*cs,cv=v0+(r.j+r.h/2)*cs,small=k>0&&du*dv<45,L=Math.max(du,dv),Wd=Math.min(du,dv);
@@ -707,10 +711,12 @@ const CTLS=[
  ctl('cZ',{label:'Move north–south',min:-40,max:40,step:.1,get:()=>W().cz,set:v=>{W().cz=v;rebuild()},fmt:v=>`${v.toFixed(1)} m`}),
  ctl('cTime',{label:'Time of day',min:6,max:20,step:.25,get:()=>S.time,set:v=>{S.time=v;setSun()},fmt:v=>{const h=Math.floor(v),m=Math.round((v-h)*60);return`${(h+11)%12+1}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}`}}),
  ctl('cPhotoW',{label:'Photo width',min:15,max:250,step:1,get:()=>S.photoW,set:v=>{S.photoW=v;placePhoto()},fmt:v=>`${v} m across`}),
- ctl('cPhotoR',{label:'Photo rotation',min:-180,max:180,step:1,get:()=>S.photoR,set:v=>{S.photoR=v;placePhoto()},fmt:v=>`${v}°`})];
+ ctl('cPhotoR',{label:'Photo rotation',min:-180,max:180,step:1,get:()=>S.photoR,set:v=>{S.photoR=v;placePhoto()},fmt:v=>`${v}°`}),
+ ctl('cImgX',{label:'Shift photo east–west',min:-12,max:12,step:.1,get:()=>S.imgX||0,set:v=>{S.imgX=v;site.position.x=v},fmt:v=>`${v.toFixed(1)} m`}),
+ ctl('cImgZ',{label:'Shift photo north–south',min:-12,max:12,step:.1,get:()=>S.imgZ||0,set:v=>{S.imgZ=v;site.position.z=v},fmt:v=>`${v.toFixed(1)} m`})];
 const syncCtls=()=>CTLS.forEach(c=>c.sync());
 function selectWing(i){S.sel=clamp(i,0,S.wings.length-1);buildHouse();renderWingSel();renderWingList();renderStyles();syncCtls()}
-function setBefore(on){house.visible=!on;const b=$('#beforeBtn');b.hidden=!(S.ground==='sat'||S.photo);b.setAttribute('aria-pressed',String(on));b.textContent=on?'Show new roof':'Show current roof'}
+function setBefore(on){house.visible=!on;const b=$('#beforeBtn');b.hidden=!(S.ground==='sat'||S.photo);$('#alignCtls').hidden=b.hidden;b.setAttribute('aria-pressed',String(on));b.textContent=on?'Show new roof':'Show current roof'}
 $('#beforeBtn').addEventListener('click',()=>{const on=house.visible;setBefore(on);toast(on?'Satellite photo of the current roof':'New roof');if(on)fitView('top')});
 function updateProp(){if(S.label){$('#propKind').textContent=S.ground==='sat'?'Customer property · satellite':'Customer property';$('#propName').textContent=S.label}else{$('#propKind').textContent=S.photo?'Matched from a photo':'Sample house';$('#propName').textContent=S.photo?'Your uploaded satellite view':'Two-storey detached with garage'}}
 function refreshAll(){renderGroups();renderProducts();renderSwatches();renderStyles();renderWingSel();renderWingList();renderWalls();renderWarn();updateQuote();renderLooks();syncCtls();updateProp()}
