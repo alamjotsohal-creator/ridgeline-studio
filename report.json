@@ -1,0 +1,47 @@
+[
+ {
+  "addr": "8 Burlwood Road, Brampton, ON",
+  "withKey": false,
+  "console": [],
+  "net": {
+   "alamjotsohal-creator.github.io 200": 1,
+   "fonts.googleapis.com 200": 1,
+   "fonts.gstatic.com 200": 3,
+   "cdn.jsdelivr.net 200": 4,
+   "geocode.arcgis.com 200": 1,
+   "api.openstreetmap.org 200": 1,
+   "server.arcgisonline.com 200": 42,
+   "FAILED overpass-api.de net::ERR_ABORTED": 1,
+   "FAILED overpass.kumi.systems net::ERR_ABORTED": 1,
+   "FAILED overpass.private.coffee net::ERR_ABORTED": 1
+  },
+  "bodies": {
+   "geocode.arcgis.com": "{\"spatialReference\":{\"wkid\":4326,\"latestWkid\":4326},\"candidates\":[{\"address\":\"8 Burlwood Rd, Brampton, Ontario, L6P 4E9\",\"location\":{\"x\":-79.737507672858,\"y\":43.791265000492},\"score\":100,\"attributes\":{\"Addr_type\":\"PointAddress\"},\"extent\":{\"xmin\":-79.738507672858,\"ymin\":43.790265000492,\"xmax\":-79.736507672858,\"ymax\":43.792265000492}}]}"
+  },
+  "tileCors": "*",
+  "secs": 7,
+  "mode": "sat",
+  "clip": 0,
+  "label": "8 Burlwood Rd, Brampton, Ontario, L6P 4E9",
+  "src": "esri",
+  "fp": true,
+  "fpSrc": "osm-api",
+  "hiRes": true,
+  "ground": "sat",
+  "toast": "Loaded 8 Burlwood Rd, Brampton, Ontario, L6P 4E9",
+  "area": "2,891",
+  "wings": [
+   {
+    "n": "Main house",
+    "l": 16,
+    "w": 13.5,
+    "h": 5.7,
+    "pitch": 6,
+    "style": "hip",
+    "rot": 141,
+    "cx": -1.9,
+    "cz": -1.4
+   }
+  ]
+ }
+]
