@@ -1,0 +1,151 @@
+[
+ {
+  "addr": "8 Burlwood Road, Brampton, ON",
+  "console": [
+   "Failed to load resource: the server responded with a status of 502 ()",
+   "[.WebGL-0x2e34000ca300]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+   "[.WebGL-0x2e34000ca300]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+  ],
+  "net": {
+   "alamjotsohal-creator.github.io 200": 1,
+   "fonts.googleapis.com 200": 1,
+   "fonts.gstatic.com 200": 3,
+   "cdn.jsdelivr.net 200": 14,
+   "geocode.arcgis.com 200": 1,
+   "api.openstreetmap.org 200": 1,
+   "overpass-api.de 502": 1,
+   "api.cesium.com 200": 1,
+   "tile.googleapis.com 200": 676,
+   " 200": 532,
+   "FAILED overpass.kumi.systems net::ERR_ABORTED": 1,
+   "FAILED overpass.private.coffee net::ERR_ABORTED": 1
+  },
+  "secs": 25,
+  "builtin": true,
+  "frontAz": 1.0441740161836655,
+  "rc": 1,
+  "roofMode": "real",
+  "scan": {
+   "area": 319,
+   "pitch": 9,
+   "perim": 45,
+   "avgL": 0.25,
+   "minY": 1.65,
+   "maxY": 12.12,
+   "ang": -141
+  },
+  "mode": "g3d",
+  "scanned": 1,
+  "scanArea": 252,
+  "fitted": 1,
+  "clip": 0,
+  "label": "8 Burlwood Rd, Brampton, Ontario, L6P 4E9",
+  "fp": true,
+  "ground": "g3d",
+  "toast": "Loaded 8 Burlwood Rd, Brampton, Ontario, L6P 4E9",
+  "attrib": "Google · Google",
+  "area": "3,435",
+  "wings": [
+   {
+    "n": "Main house",
+    "l": 17.5,
+    "w": 14.5,
+    "h": 6.54,
+    "pitch": 9.5,
+    "style": "hip",
+    "rot": 141,
+    "cx": -2.4,
+    "cz": -2.3
+   }
+  ]
+ },
+ {
+  "addr": "55 Burlwood Road, Brampton, ON",
+  "console": [],
+  "net": {
+   "alamjotsohal-creator.github.io 200": 1,
+   "fonts.googleapis.com 200": 1,
+   "cdn.jsdelivr.net 200": 14,
+   "fonts.gstatic.com 200": 3,
+   "geocode.arcgis.com 200": 1,
+   "api.openstreetmap.org 200": 1,
+   "api.cesium.com 200": 1,
+   "tile.googleapis.com 200": 872,
+   " 200": 563,
+   "FAILED overpass-api.de net::ERR_ABORTED": 1,
+   "FAILED overpass.kumi.systems net::ERR_ABORTED": 1,
+   "FAILED overpass.private.coffee net::ERR_ABORTED": 1
+  },
+  "secs": 26,
+  "builtin": true,
+  "frontAz": -2.3383341589275775,
+  "rc": 1,
+  "roofMode": "real",
+  "scan": {
+   "area": 640,
+   "pitch": 10.5,
+   "perim": 76,
+   "avgL": 0.239,
+   "minY": 1.74,
+   "maxY": 12.28,
+   "ang": -135
+  },
+  "mode": "g3d",
+  "scanned": 4,
+  "scanArea": 462,
+  "fitted": 4,
+  "clip": 0,
+  "label": "55 Burlwood Rd, Brampton, Ontario, L6P 4E7",
+  "fp": true,
+  "ground": "g3d",
+  "toast": "Loaded 55 Burlwood Rd, Brampton, Ontario, L6P 4E7",
+  "attrib": "Google · Google",
+  "area": "6,888",
+  "wings": [
+   {
+    "n": "Main house",
+    "l": 23,
+    "w": 16.5,
+    "h": 4.44,
+    "pitch": 11,
+    "style": "hip",
+    "rot": 45,
+    "cx": 3.3,
+    "cz": -0.9
+   },
+   {
+    "n": "Section 2",
+    "l": 12,
+    "w": 10,
+    "h": 7.6,
+    "pitch": 4.5,
+    "style": "gable",
+    "rot": 135,
+    "cx": 3.1,
+    "cz": -11
+   },
+   {
+    "n": "Section 3",
+    "l": 12,
+    "w": 8,
+    "h": 7.09,
+    "pitch": 6,
+    "style": "gable",
+    "rot": 135,
+    "cx": -7.1,
+    "cz": -0.6
+   },
+   {
+    "n": "Section 4",
+    "l": 16,
+    "w": 3.5,
+    "h": 7.22,
+    "pitch": 9.5,
+    "style": "hip",
+    "rot": 45,
+    "cx": 6.2,
+    "cz": 6.1
+   }
+  ]
+ }
+]
