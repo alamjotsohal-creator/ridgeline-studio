@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ridgeline Studio</title>
-<meta name="ridgeline-build" content="g3d-scan-1">
+<meta name="ridgeline-build" content="g3d-reshingle-1">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -225,6 +225,7 @@ select{border:1px solid var(--line-2);background:var(--surface);border-radius:8p
         </div>
         <div class="sec">
           <div class="sec-h"><h2>Roof shape</h2><label class="sr" for="wingSel">Section</label><select id="wingSel"></select></div>
+          <div class="row" id="realRow" hidden><button type="button" class="chip" id="realRoof" aria-pressed="true">Real roof shape</button><span class="hint">Your actual roof from Google 3D, re-shingled. Pick a shape below to model a different one.</span></div>
           <div class="styles" id="styleGrid"></div>
           <div class="ctl" id="cPitch"></div>
           <div class="ctl" id="cOver"></div>
@@ -452,7 +453,7 @@ const matRoof=new THREE.MeshStandardMaterial({roughness:.9}),matWall=new THREE.M
  matGlass=new THREE.MeshStandardMaterial({color:0x1a2632,roughness:.06,metalness:.75}),matDoor=new THREE.MeshStandardMaterial({color:0x3b2c24,roughness:.6}),matGarage=new THREE.MeshStandardMaterial({map:garageT,roughness:.5});
 const MATS={roof:matRoof,wall:matWall,trim:matTrim,soffit:matSoffit,deck:matDeck,glass:matGlass,frame:matTrim,door:matDoor,garage:matGarage};
 const pickMat=new THREE.MeshBasicMaterial({visible:false});
-function applyRoof(){const p=prod(),ci=S.colorOf[p.id]||0,t=roofTex(p,ci);matRoof.map=t.map;matRoof.normalMap=t.normal;matRoof.normalScale.set(1,1);matRoof.roughness=t.galv?.3:p.rough;matRoof.metalness=t.galv?.85:p.metal;matRoof.needsUpdate=true}
+function applyRoof(){const p=prod(),ci=S.colorOf[p.id]||0,t=roofTex(p,ci);matRoof.map=t.map;matRoof.normalMap=t.normal;matRoof.normalScale.set(1,1);matRoof.roughness=t.galv?.3:p.rough;matRoof.metalness=t.galv?.85:p.metal;matRoof.needsUpdate=true;rcU.uRcTex.value=t.map;rcU.uRcTile.value.set(1/t.map.repeat.x,1/t.map.repeat.y)}
 function applyWalls(){const t=wallTex(siding(),S.sidingColor);matWall.map=t.map;matWall.normalMap=t.normal;matWall.needsUpdate=true}
 function applyTrim(){const c=TRIMS[S.trim][1];matTrim.color.set(c);matSoffit.color.set(c).multiplyScalar(.82);matGarage.color.set(c)}
 
@@ -522,11 +523,11 @@ function addWing(B,w,idx,st){
  const g=Object.assign({},w,{l:L,w:Wd}),f=shape(g),c=Math.cos(rot),s=Math.sin(rot);
  const T=p=>[w.cx+p[0]*c+p[2]*s,p[1],w.cz-p[0]*s+p[2]*c],D=(x,z)=>[x*c+z*s,-x*s+z*c];
  const out=q=>{let x=0,z=0;for(const p of q){x+=p[0];z+=p[2]}return[x/q.length-w.cx,z/q.length-w.cz]};
- f.wall.forEach(pp=>{const q=pp.map(T);B.poly(q,'wall',out(q),'wall')});
+ const noWalls=S.mode==='g3d'&&w.base;if(!noWalls)f.wall.forEach(pp=>{const q=pp.map(T);B.poly(q,'wall',out(q),'wall')});
  const polys=[];const reg=(pp,deck)=>{const q=pp.map(T),area=B.poly(q,deck?'deck':'roof','up',deck?'plan':'roof');let mn=1e9,mx=-1e9,cx=0,cy=0,cz=0;for(const p of q){mn=Math.min(mn,p[1]);mx=Math.max(mx,p[1]);cx+=p[0];cy+=p[1];cz+=p[2]}polys.push({pts:q,deck,minY:mn,maxY:mx,c:[cx/q.length,cy/q.length,cz/q.length]});if(deck)st.deck+=area;else st.area+=area};
  f.roof.forEach(pp=>reg(pp,false));f.deck.forEach(pp=>reg(pp,true));
  roofExtras(B,polys,st);
- const a=L/2,b=Wd/2,h=w.h;if(h<2.2)return;
+ const a=L/2,b=Wd/2,h=w.h;if(h<2.2||noWalls)return;
  const nf=h>=4.8?2:1,fh=h/nf;
  for(const[sd,nx,nz]of[['pz',0,1],['nz',0,-1],['px',1,0],['nx',-1,0]]){
   const len=nz?2*a:2*b,tx=nz,tz=-nx,dir=D(nx,nz);
@@ -546,7 +547,7 @@ let stats={},flashUntil=0;
 function buildHouse(){
  for(const grp of[house,pickers])grp.children.slice().forEach(m=>{grp.remove(m);m.geometry.dispose()});
  const B=new Builder();stats={area:0,deck:0,ridge:0,hip:0,eave:0,rake:0,flash:0};
- S.wings.forEach((w,i)=>addWing(B,w,i,stats));
+ const realR=S.mode==='g3d'&&S.roofMode==='real'&&!!S.scan;S.wings.forEach((w,i)=>{if(!(realR&&w.base))addWing(B,w,i,stats)});
  for(const k in B.b){const b=B.b[k];if(!b.p.length)continue;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.n,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(b.u,2));const m=new THREE.Mesh(g,MATS[k]);m.userData.k=k;m.castShadow=k!=='glass';m.receiveShadow=true;house.add(m)}
  S.wings.forEach((w,i)=>{const top=w.h+Math.min(w.l,w.w)/2*w.pitch/12+.4,m=new THREE.Mesh(new THREE.BoxGeometry(w.l+2*w.ov,top,w.w+2*w.ov),pickMat);m.position.set(w.cx,top/2,w.cz);m.rotation.y=w.rot;m.userData.i=i;pickers.add(m)});
  const w=S.wings[S.sel];if(w){outline.geometry.dispose();outline.geometry=new THREE.EdgesGeometry(new THREE.BoxGeometry(w.l,w.h,w.w));outline.position.set(w.cx,w.h/2,w.cz);outline.rotation.y=w.rot}
@@ -578,7 +579,8 @@ function setSun(){const t=S.time,az=(12-t)/6*Math.PI/2*.95,el=Math.max(.07,Math.
 /* ---------- camera ---------- */
 let tw=null;
 function fitView(kind,instant){
- const box=new THREE.Box3().setFromObject(house),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),r=Math.max(kind==='top'?15:7,Math.hypot(sz.x,sz.z)/2+1.5);
+ let box=new THREE.Box3().setFromObject(house);if(box.isEmpty()&&S.wings.length){const b=wingBox(),hh=Math.max(6,...S.wings.map(w=>w.h+Math.min(w.l,w.w)/2*w.pitch/12)),r=b.r*.72;box=new THREE.Box3(new THREE.Vector3(b.cx-r,0,b.cz-r),new THREE.Vector3(b.cx+r,hh,b.cz+r))}
+ const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),r=Math.max(kind==='top'?15:7,Math.hypot(sz.x,sz.z)/2+1.5);
  const vf=camera.fov*Math.PI/360,hf=Math.atan(Math.tan(vf)*camera.aspect),dist=r/Math.sin(Math.min(vf,hf))*.86;
  let az=.72,el=.36;if(kind==='top'){az=0;el=1.47}else if(kind==='front'){az=0;el=.2}
  const tg=new THREE.Vector3(c.x,kind==='top'?0:sz.y*.36,c.z),pos=new THREE.Vector3(tg.x+dist*Math.cos(el)*Math.sin(az),tg.y+dist*Math.sin(el),tg.z+dist*Math.cos(el)*Math.cos(az));
@@ -669,9 +671,9 @@ async function loadAddress(q){
   toast('Loading the building outline…',0);let fp=null;try{fp=await footprint(geo.lat,geo.lon)}catch(e){}
   let wings=fp?toWings(fp.pts,fp.tags):null,note='';
   if(!wings||!wings.length){wings=[{name:'Main house',cx:0,cz:0,rot:0,l:12,w:9,h:5.6,style:'gable',pitch:6,ov:.4,door:'pz'}];note='No building outline on file here, so a standard house was placed. Adjust it under House.'}
-  S.wings=wings;S.sel=0;S.label=geo.label;S.photo=null;S.fp=!!fp;S.fpPts=fp?fp.pts:null;S.scanned=0;clearSite();stopTiles();let g3=false;
+  wings.forEach(w=>w.base=true);S.wings=wings;S.sel=0;S.label=geo.label;S.photo=null;S.fp=!!fp;S.fpPts=fp?fp.pts:null;S.scanned=0;S.showCurrent=false;if(S.scan&&S.scan.mt)S.scan.mt.dispose();S.scan=null;S.roofMode='model';clearSite();stopTiles();let g3=false;
   if(getKey()&&S.g3d!==false){toast('Loading Google 3D…',0);const r=await startTiles(geo.lat,geo.lon);
-   if(r.ok){toast('Measuring the roof…',0);await fitToTiles();g3=true;S.ground='g3d';$('#attrib').hidden=false}
+   if(r.ok){toast('Measuring the roof…',0);await fitToTiles();g3=true;S.ground='g3d';S.roofMode=S.scan?'real':'model';$('#attrib').hidden=false}
    else{setMode('sat');note=r.why==='auth'?'Google 3D didn’t accept your key, so this is the satellite view. Check the key under House → Google 3D key.':'Google 3D didn’t load, so this is the satellite view.'}}
   if(!g3){setMode('sat');toast('Loading satellite imagery…',0);let img=null;try{img=await imagery(geo.lat,geo.lon)}catch(e){}
    if(img){const b=img.base;groundImage(b.canvas,b.size,b.size,b.ox,b.oz,0,-3);if(img.detail){const d=img.detail;groundImage(d.canvas,d.size,d.size,d.ox,d.oz,0,-2)}shadowCatcher(b.size,b.ox,b.oz);S.ground='sat';S.hiRes=!!img.detail}else{flat(320,320,grassM,0,0,0);S.ground='lawn'}
@@ -686,12 +688,31 @@ const DBG=new URLSearchParams(location.search).has('debug'),BUILTIN_KEY='__RIDGE
 const DRACO='https://www.gstatic.com/draco/versioned/decoders/1.5.7/',D2R=Math.PI/180;
 const tilesRoot=new THREE.Group();tilesRoot.rotation.y=Math.PI;tilesRoot.visible=false;scene.add(tilesRoot);
 let tiles=null,attrT=0;const attribDefault=$('#attrib').textContent;
+const RC_DECL='uniform float uRcOn;uniform sampler2D uRcMask;uniform vec3 uRcXf;uniform sampler2D uRcTex;uniform vec2 uRcTile;uniform vec2 uRcAxis;uniform float uRcSin;uniform float uRcAvgL;uniform vec2 uRcY;';
+const RC_CODE=`
+if(uRcOn>0.5){
+ vec3 rq=dFdx(vRLW),rw=dFdy(vRLW),nn=normalize(cross(rq,rw));if(nn.y<0.0)nn=-nn;
+ vec2 dd=nn.xz/max(length(nn.xz),1e-4),ax=uRcAxis,bx=vec2(-ax.y,ax.x);float ca=dot(dd,ax),cb=dot(dd,bx);vec2 ds=abs(ca)>abs(cb)?ax*sign(ca):bx*sign(cb),tt=vec2(-ds.y,ds.x);
+ vec2 suv=vec2(dot(vRLW.xz,tt)/uRcTile.x,vRLW.y/uRcSin/uRcTile.y);
+ vec2 sgx=vec2(dot(rq.xz,tt)/uRcTile.x,rq.y/uRcSin/uRcTile.y),sgy=vec2(dot(rw.xz,tt)/uRcTile.x,rw.y/uRcSin/uRcTile.y);
+ vec3 shc=textureGrad(uRcTex,suv,sgx,sgy).rgb;
+ vec2 mu=(vRLW.xz-uRcXf.xy)/uRcXf.z;float mk=texture(uRcMask,clamp(mu,0.0,1.0)).r;
+ float lum=uRcAvgL;
+#ifdef USE_MAP
+ lum=dot(texture(map,vMapUv,3.0).rgb,vec3(0.2126,0.7152,0.0722));
+#endif
+ vec3 sg=pow(max(diffuseColor.rgb,vec3(0.0)),vec3(0.4545));
+ bool inside=mu.x>0.0&&mu.y>0.0&&mu.x<1.0&&mu.y<1.0&&mk>0.5&&vRLW.y>uRcY.x&&vRLW.y<uRcY.y&&nn.y>0.42&&!((2.0*sg.g-sg.r-sg.b)>0.09&&sg.g>sg.r);
+ if(inside)diffuseColor.rgb=shc*mix(1.0,clamp(lum/uRcAvgL,0.3,1.7),0.85);
+}`;
+const rcU={uRcOn:{value:0},uRcMask:{value:null},uRcXf:{value:new THREE.Vector3()},uRcTex:{value:null},uRcTile:{value:new THREE.Vector2(1,1)},uRcAxis:{value:new THREE.Vector2(1,0)},uRcSin:{value:.45},uRcAvgL:{value:.3},uRcY:{value:new THREE.Vector2(0,100)}};
+function updateRecolor(){const sc=S.scan,on=S.mode==='g3d'&&S.roofMode==='real'&&!!sc&&!S.showCurrent;rcU.uRcOn.value=on?1:0;if(!sc)return;rcU.uRcMask.value=sc.mt;rcU.uRcXf.value.set(sc.x0,sc.z0,sc.size);rcU.uRcAxis.value.set(Math.cos(sc.ang),Math.sin(sc.ang));rcU.uRcSin.value=Math.max(.2,sc.sin||.45);rcU.uRcAvgL.value=Math.max(.02,sc.avgL);rcU.uRcY.value.set(sc.minY,sc.maxY)}
 const clipU={uRects:{value:Array.from({length:6},()=>new THREE.Vector4())},uDims:{value:Array.from({length:6},()=>new THREE.Vector4())},uCount:{value:0}};
-function patchMat(m){if(!m||m.userData.rl)return;m.userData.rl=1;m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,clipU);
+function patchMat(m){if(!m||m.userData.rl)return;m.userData.rl=1;m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,clipU,rcU);
  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vRLW;').replace('#include <begin_vertex>','#include <begin_vertex>\nvRLW=(modelMatrix*vec4(transformed,1.0)).xyz;');
- sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vRLW;uniform vec4 uRects[6];uniform vec4 uDims[6];uniform int uCount;').replace('void main() {','void main() {\n for(int i=0;i<6;i++){if(i>=uCount)break;vec2 d=vRLW.xz-uRects[i].xy;vec2 l=vec2(d.x*uRects[i].z-d.y*uRects[i].w,d.x*uRects[i].w+d.y*uRects[i].z);if(abs(l.x)<uDims[i].x&&abs(l.y)<uDims[i].y&&vRLW.y>uDims[i].z)discard;}')};
- m.customProgramCacheKey=()=>'rl-clip';m.needsUpdate=true}
-function updateClip(){let n=0;if(S.mode==='g3d'&&house.visible)for(const w of S.wings){if(n>=6)break;clipU.uRects.value[n].set(w.cx,w.cz,Math.cos(w.rot),Math.sin(w.rot));clipU.uDims.value[n].set(w.l/2-.25,w.w/2-.25,w.h-.35,0);n++}clipU.uCount.value=n}
+ sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vRLW;uniform vec4 uRects[6];uniform vec4 uDims[6];uniform int uCount;'+RC_DECL).replace('#include <map_fragment>','#include <map_fragment>\n'+RC_CODE).replace('void main() {','void main() {\n for(int i=0;i<6;i++){if(i>=uCount)break;vec2 d=vRLW.xz-uRects[i].xy;vec2 l=vec2(d.x*uRects[i].z-d.y*uRects[i].w,d.x*uRects[i].w+d.y*uRects[i].z);if(abs(l.x)<uDims[i].x&&abs(l.y)<uDims[i].y&&vRLW.y>uDims[i].z)discard;}')};
+ m.customProgramCacheKey=()=>'rl2';m.needsUpdate=true}
+function updateClip(){let n=0;if(S.mode==='g3d'&&house.visible&&!(S.roofMode==='real'&&S.scan))for(const w of S.wings){if(n>=6)break;if(!w.base)continue;clipU.uRects.value[n].set(w.cx,w.cz,Math.cos(w.rot),Math.sin(w.rot));clipU.uDims.value[n].set(w.l/2-.25,w.w/2-.25,w.h-.35,0);n++}clipU.uCount.value=n}
 function stopTiles(){if(tiles){tilesRoot.remove(tiles.group);try{tiles.dispose()}catch(e){}tiles=null}clipU.uCount.value=0}
 const rc=new THREE.Raycaster(),DOWN=new THREE.Vector3(0,-1,0);
 function hitY(x,z){tilesRoot.updateMatrixWorld(true);rc.set(new THREE.Vector3(x,4000,z),DOWN);rc.far=9000;const h=rc.intersectObject(tilesRoot,true)[0];return h?h.point.y:null}
@@ -721,7 +742,7 @@ async function fitToTiles(){
  const ring=[];for(let i=0;i<16;i++){const a=i/16*Math.PI*2,y=hitY(b.cx+Math.cos(a)*(b.r+5),b.cz+Math.sin(a)*(b.r+5));if(y!=null)ring.push(y)}
  if(ring.length){ring.sort((p,q)=>p-q);tilesRoot.position.y-=ring[Math.floor(ring.length*.25)]}
  S.scanned=0;S.scanArea=0;renderer.shadowMap.autoUpdate=false;
- try{const ws=maskWings(scanTiles(b.cx,b.cz,size,256),S.fpPts);if(ws&&ws.length){S.wings=ws;S.sel=0;S.scanned=ws.length}}catch(e){console.warn('scan',e)}finally{renderer.shadowMap.autoUpdate=true}
+ try{const ws=maskWings(scanTiles(b.cx,b.cz,size,256),S.fpPts);if(ws&&ws.length){ws.forEach(w=>{w.base=true;w.scan=true});S.wings=ws;S.sel=0;S.scanned=ws.length}}catch(e){console.warn('scan',e)}finally{renderer.shadowMap.autoUpdate=true}
  S.fitted=0;for(const w of S.wings)if(fitWing(w))S.fitted++;tiles.errorTarget=et;controls.maxDistance=220}
 function morph(M,N,k,dil){const o=new Uint8Array(N*N);for(let y=0;y<N;y++)for(let x=0;x<N;x++){let v=dil?0:1;outer:for(let dy=-k;dy<=k;dy++)for(let dx=-k;dx<=k;dx++){const yy=y+dy,xx=x+dx,m=(yy<0||xx<0||yy>=N||xx>=N)?0:M[yy*N+xx];if(dil?m:!m){v=dil?1:0;break outer}}o[y*N+x]=v}return o}
 function hull(P){if(P.length<3)return P;P=P.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]),lo=[],up=[];for(const p of P){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p)}for(let i=P.length-1;i>=0;i--){const p=P[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p)}up.pop();lo.pop();return lo.concat(up)}
@@ -759,6 +780,15 @@ function maskWings(sc,fp){
  u0-=cell/2;v0-=cell/2;u1+=cell/2;v1+=cell/2;
  const cs=.5,nu=Math.max(1,Math.ceil((u1-u0)/cs)),nv=Math.max(1,Math.ceil((v1-v0)/cs)),grid=new Uint8Array(nu*nv);
  for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const u=u0+(i+.5)*cs,v=v0+(j+.5)*cs,x=u*c-v*s,z=u*s+v*c,cc=Math.floor((x-x0)/cell),rr=Math.floor((z1-z)/cell);if(cc>=0&&rr>=0&&cc<N&&rr<N&&comp[rr*N+cc])grid[j*nu+i]=1}
+ const isC=i=>comp[i]===1,facs=[],slopes=[],ys=[];let Ls=0,Ln=0;
+ for(let i=0;i<n;i++){if(!comp[i])continue;const x=i%N,y=(i/N)|0,h=H[i];if(!(h===h))continue;ys.push(h);
+  if(h-g0>2.3){Ls+=(.2126*C[i*4]+.7152*C[i*4+1]+.0722*C[i*4+2])/255;Ln++}
+  if(x>0&&y>0&&x<N-1&&y<N-1&&isC(i-1)&&isC(i+1)&&isC(i-N)&&isC(i+N)){const a1=H[i+1],a2=H[i-1],a3=H[i+N],a4=H[i-N];if(a1===a1&&a2===a2&&a3===a3&&a4===a4){const sl=Math.hypot((a1-a2)/(2*cell),(a3-a4)/(2*cell));facs.push(Math.min(2.2,Math.sqrt(1+sl*sl)));if(sl>.15&&sl<1.8)slopes.push(sl)}}}
+ slopes.sort((p,q)=>p-q);ys.sort((p,q)=>p-q);const sl=slopes.length>facs.length*.25?slopes[slopes.length>>1]:0,mf=facs.length?facs.reduce((p,q)=>p+q,0)/facs.length:1.1;
+ const dm=morph(comp,N,2,1),td=new Uint8Array(n);for(let r=0;r<N;r++)for(let k=0;k<N;k++)td[(N-1-r)*N+k]=dm[r*N+k]?255:0;
+ if(S.scan&&S.scan.mt)S.scan.mt.dispose();
+ const mt=new THREE.DataTexture(td,N,N,THREE.RedFormat,THREE.UnsignedByteType);mt.magFilter=mt.minFilter=THREE.LinearFilter;mt.needsUpdate=true;
+ S.scan={mt,x0,z0:z1-N*cell,size:N*cell,ang,sin:sl/Math.sqrt(1+sl*sl),pitch:Math.round(sl*24)/2,avgL:Ln?Ls/Ln:.3,minY:g0+1.8,maxY:(ys.length?ys[Math.floor(ys.length*.98)]:g0+12)+.6,area:area*mf,perim:edge.length*cell*.9};
  return gridWings(grid,nu,nv,cs,u0,v0,c,s,ang,{hMain:5.7,tagStyle:null,area,ov:.15,minA:8})}
 function inOtherXZ(x,z,self){for(const o of S.wings){if(o===self)continue;const dx=x-o.cx,dz=z-o.cz,c=Math.cos(o.rot),s=Math.sin(o.rot),lx=dx*c-dz*s,lz=dx*s+dz*c;if(Math.abs(lx)<o.l/2&&Math.abs(lz)<o.w/2)return true}return false}
 function fitWing(w){
@@ -772,8 +802,8 @@ function fitWing(w){
  w.h=clamp(ys-ins*t,2.4,45);w.pitch=clamp(Math.round(t*24)/2,3,14);
  const ends=[Y(L/2-1.2,0),Y(1.2-L/2,0)].filter(ok);
  if(!['mansard','gambrel','dutch'].includes(w.style))w.style=ends.length&&(yr-Math.max(...ends))<.8?'gable':'hip';return true}
-function setMode(m){S.mode=m;const g=m==='g3d';far.visible=!g;site.visible=!g;tilesRoot.visible=g;house.position.y=g?.12:0;scene.fog.near=g?350:90;scene.fog.far=g?2600:330;if(!g)$('#attrib').textContent=attribDefault;applyModeVis();updateClip();updateG3dBtn()}
-function applyModeVis(){const g=S.mode==='g3d';house.children.forEach(m=>{m.visible=!g||['roof','deck','trim','soffit'].includes(m.userData.k)})}
+function setMode(m){S.mode=m;const g=m==='g3d';far.visible=!g;site.visible=!g;tilesRoot.visible=g;house.position.y=g?.12:0;scene.fog.near=g?350:90;scene.fog.far=g?2600:330;if(!g)$('#attrib').textContent=attribDefault;applyModeVis();updateClip();updateRecolor();updateG3dBtn()}
+function applyModeVis(){house.visible=!S.showCurrent}
 function updateG3dBtn(){const b=$('#g3dBtn'),k=!!getKey();b.setAttribute('aria-pressed',String(S.mode==='g3d'));b.textContent=!k?'Add Google 3D':S.mode==='g3d'?'Google 3D: on':'Google 3D: off'}
 function openKeyDlg(){$('#notice').hidden=true;$('#keyIn').value='';$('#keyClear').hidden=!store.get('key3d','');$('#keyDlg').hidden=false;setTimeout(()=>$('#keyIn').focus(),50)}
 $('#g3dBtn').addEventListener('click',()=>{if(!getKey()){openKeyDlg();return}S.g3d=S.mode!=='g3d';const q=$('#addr').value.trim();if(S.label&&q)loadAddress(q);else{updateG3dBtn();toast(S.g3d?'Load an address to see it in Google 3D':'Google 3D is off')}});
@@ -788,8 +818,8 @@ function grad(tones,galv){if(tones.length===1){const c=hx(tones[0]);return`linea
 function renderGroups(){$('#groupChips').innerHTML=GROUPS.map(g=>`<button type="button" class="chip" data-g="${g}" aria-pressed="${g===S.group}">${g}</button>`).join('')}
 function renderProducts(){$('#productList').innerHTML=PRODUCTS.filter(p=>S.group==='All'||p.group===S.group).map(p=>`<button type="button" class="prod" data-p="${p.id}" aria-pressed="${p.id===S.product}"><span class="pn">${p.name}<em>${p.group}</em></span><span class="ps">${p.spec}</span><span class="pm">min ${p.min}/12 · ${p.life} · ~${p.wt} lb/sq</span></button>`).join('')}
 function renderSwatches(){const p=prod(),ci=S.colorOf[p.id]||0;$('#swatches').innerHTML=p.colors.map((c,i)=>`<button type="button" class="sw" data-c="${i}" aria-pressed="${i===ci}"><i style="background:${grad(c[1],c[2])}"></i><span>${c[0]}</span></button>`).join('');$('#colorName').textContent=p.colors[ci][0]}
-function renderStyles(){const w=S.wings[S.sel];$('#styleGrid').innerHTML=STYLES.map(s=>`<button type="button" class="st" data-s="${s[0]}" aria-pressed="${w&&w.style===s[0]}"><svg viewBox="0 0 40 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M8 ${s[0]==='flat'?14:17}V26H32V${s[0]==='flat'?14:17}" opacity=".5"/><path d="${s[2]}"/></svg>${s[1]}</button>`).join('');
- const fx=w&&FIXED[w.style];$('#cPitch').classList.toggle('off',!!fx);$('#cPitch input').disabled=!!fx;$('#flipRidge').hidden=!w||['hip','mansard','flat'].includes(w.style)}
+function renderStyles(){const w=S.wings[S.sel],real=S.mode==='g3d'&&S.roofMode==='real'&&!!S.scan;$('#realRow').hidden=!(S.mode==='g3d'&&S.scan);$('#realRoof').setAttribute('aria-pressed',String(real));$('#styleGrid').innerHTML=STYLES.map(s=>`<button type="button" class="st" data-s="${s[0]}" aria-pressed="${!real&&!!w&&w.style===s[0]}"><svg viewBox="0 0 40 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M8 ${s[0]==='flat'?14:17}V26H32V${s[0]==='flat'?14:17}" opacity=".5"/><path d="${s[2]}"/></svg>${s[1]}</button>`).join('');
+ const fx=real||(w&&FIXED[w.style]);$('#cPitch').classList.toggle('off',!!fx);$('#cPitch input').disabled=!!fx;$('#cOver').classList.toggle('off',real);$('#cOver input').disabled=real;$('#flipRidge').hidden=real||!w||['hip','mansard','flat'].includes(w.style)}
 function renderWingSel(){const sel=$('#wingSel');sel.innerHTML=S.wings.map((w,i)=>`<option value="${i}">${esc(w.name)}</option>`).join('');sel.value=S.sel;sel.hidden=S.wings.length<2}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function renderWingList(){$('#wingList').innerHTML=S.wings.map((w,i)=>`<button type="button" class="wing" data-w="${i}" aria-pressed="${i===S.sel}"><span>${esc(w.name)}</span><span>${Math.round(w.l*3.28084)}′×${Math.round(w.w*3.28084)}′ · ${w.style} ${FIXED[w.style]?'':w.pitch+'/12'}</span></button>`).join('');$('#delWing').hidden=S.wings.length<2}
@@ -800,14 +830,14 @@ function renderWarn(){const p=prod(),low=S.wings.filter(w=>!FIXED[w.style]&&w.pi
  if(low.length)m=`${low.map(w=>w.name).join(', ')}: ${Math.min(...low.map(w=>w.pitch))}/12 is below the usual ${p.min}/12 minimum for ${p.name.toLowerCase()}. Check the manufacturer’s low-slope rules.`;
  if(flatw.length)m+=(m?' ':'')+`The flat area on ${flatw.map(w=>w.name).join(', ')} needs a low-slope membrane, shown in grey.`;
  const el=$('#pitchWarn');el.textContent=m;el.hidden=!m}
-function updateQuote(){const p=prod(),sqft=stats.area*10.7639,hipish=S.wings.some(w=>['hip','dutch','mansard'].includes(w.style)),waste=Math.min(.2,(hipish?.15:.1)+.03*(S.wings.length-1)),sq=sqft*(1+waste)/100;
+function updateQuote(){const p=prod(),real=S.mode==='g3d'&&S.roofMode==='real'&&!!S.scan,sqft=(stats.area+(real?S.scan.area:0))*10.7639,hipish=real||S.wings.some(w=>['hip','dutch','mansard'].includes(w.style)),waste=Math.min(.2,(hipish?.15:.1)+.03*(S.wings.length-1)),sq=sqft*(1+waste)/100;
  $('#qArea').textContent=Math.round(sqft).toLocaleString('en-CA');$('#qSq').textContent=sq.toFixed(1);$('#qSqSub').textContent=`squares with ${Math.round(waste*100)}% waste`+(p.group==='Asphalt'?` · ${Math.ceil(sq*3)} bundles`:'');
  const cu=S.rates[p.id];$('#qProd').textContent=`${p.name}, ${p.colors[S.colorOf[p.id]||0][0]}`;
  $('#qCost').textContent=cu!=null?money(cu*sq*100):`${money(p.rate[0]*sq*100)} – ${money(p.rate[1]*sq*100)}`;
  $('#qRateNote').textContent=cu!=null?`Installed, at your rate of $${cu}/sq ft`:`Installed, sample range $${p.rate[0]}–${p.rate[1]}/sq ft · lasts ${p.life}`;
  $('#rateIn').value=cu!=null?cu:'';$('#rateReset').hidden=cu==null;
  const pitches=S.wings.filter(w=>!FIXED[w.style]).map(w=>w.pitch),pmin=Math.min(...pitches),pmax=Math.max(...pitches);
- const rows=[['Pitch',pitches.length?(pmin===pmax?`${pmin}/12 (${(Math.atan(pmin/12)*180/Math.PI).toFixed(1)}°)`:`${pmin}–${pmax}/12`):'flat'],['Ridge',ftLin(stats.ridge)+' ft'],['Hips',stats.hip?ftLin(stats.hip)+' ft':''],['Eaves and gutters',ftLin(stats.eave)+' ft'],['Rakes',stats.rake?ftLin(stats.rake)+' ft':''],['Wall flashing',stats.flash?ftLin(stats.flash)+' ft':''],['Low-slope membrane',stats.deck?Math.round(stats.deck*10.7639).toLocaleString('en-CA')+' sq ft':''],['Material weight',`~${Math.round(p.wt*sq).toLocaleString('en-CA')} lb`]];
+ const rows=real?[['Pitch',S.scan.pitch?`${S.scan.pitch}/12 (${(Math.atan(S.scan.pitch/12)*180/Math.PI).toFixed(0)}°), measured`:'Low slope'],['Roof edge, eaves and rakes',ftLin(S.scan.perim)+' ft'],['Material weight',`~${Math.round(p.wt*sq).toLocaleString('en-CA')} lb`]]:[['Pitch',pitches.length?(pmin===pmax?`${pmin}/12 (${(Math.atan(pmin/12)*180/Math.PI).toFixed(1)}°)`:`${pmin}–${pmax}/12`):'flat'],['Ridge',ftLin(stats.ridge)+' ft'],['Hips',stats.hip?ftLin(stats.hip)+' ft':''],['Eaves and gutters',ftLin(stats.eave)+' ft'],['Rakes',stats.rake?ftLin(stats.rake)+' ft':''],['Wall flashing',stats.flash?ftLin(stats.flash)+' ft':''],['Low-slope membrane',stats.deck?Math.round(stats.deck*10.7639).toLocaleString('en-CA')+' sq ft':''],['Material weight',`~${Math.round(p.wt*sq).toLocaleString('en-CA')} lb`]];
  $('#qLines').innerHTML=rows.filter(r=>r[1]).map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}
 const lookName=L=>{const p=PRODUCTS.find(x=>x.id===L.p),s=SIDINGS.find(x=>x.id===L.sd);return{p,s,title:`${p.name}, ${p.colors[L.c][0]}`,sub:`${s.name} ${s.colors[L.sc][0].toLowerCase()} walls · ${TRIMS[L.tr][0].toLowerCase()} trim`}};
 const curLook=()=>({p:S.product,c:S.colorOf[S.product]||0,sd:S.siding,sc:S.sidingColor,tr:S.trim});
@@ -836,8 +866,8 @@ const CTLS=[
  ctl('cImgZ',{label:'Shift photo north–south',min:-12,max:12,step:.1,get:()=>S.imgZ||0,set:v=>{S.imgZ=v;site.position.z=v},fmt:v=>`${v.toFixed(1)} m`})];
 const syncCtls=()=>CTLS.forEach(c=>c.sync());
 function selectWing(i){S.sel=clamp(i,0,S.wings.length-1);buildHouse();renderWingSel();renderWingList();renderStyles();syncCtls()}
-function setBefore(on){house.visible=!on;updateClip();const b=$('#beforeBtn');b.hidden=!(S.ground==='sat'||S.photo||S.mode==='g3d');$('#alignCtls').hidden=b.hidden||S.mode==='g3d';b.setAttribute('aria-pressed',String(on));b.textContent=on?'Show new roof':'Show current roof'}
-$('#beforeBtn').addEventListener('click',()=>{const on=house.visible;setBefore(on);toast(on?'Satellite photo of the current roof':'New roof');if(on)fitView('top')});
+function setBefore(on){S.showCurrent=on;applyModeVis();updateClip();updateRecolor();const b=$('#beforeBtn');b.hidden=!(S.ground==='sat'||S.photo||S.mode==='g3d');$('#alignCtls').hidden=b.hidden||S.mode==='g3d';b.setAttribute('aria-pressed',String(on));b.textContent=on?'Show new roof':'Show current roof'}
+$('#beforeBtn').addEventListener('click',()=>{const on=!S.showCurrent;setBefore(on);toast(on?(S.mode==='g3d'?'Current roof':'Satellite photo of the current roof'):'New roof');if(on&&S.mode!=='g3d')fitView('top')});
 function updateProp(){if(S.label){$('#propKind').textContent=S.mode==='g3d'?'Customer property · Google 3D':S.ground==='sat'?'Customer property · satellite':'Customer property';$('#propName').textContent=S.label}else{$('#propKind').textContent=S.photo?'Matched from a photo':'Sample house';$('#propName').textContent=S.photo?'Your uploaded satellite view':'Two-storey detached with garage'}}
 function refreshAll(){renderGroups();renderProducts();renderSwatches();renderStyles();renderWingSel();renderWingList();renderWalls();renderWarn();updateQuote();renderLooks();syncCtls();updateProp()}
 
@@ -848,7 +878,8 @@ $('.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');i
 $('#groupChips').addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;S.group=b.dataset.g;renderGroups();renderProducts()});
 $('#productList').addEventListener('click',e=>{const b=e.target.closest('[data-p]');if(!b)return;S.product=b.dataset.p;applyRoof();renderProducts();renderSwatches();renderWarn();updateQuote();renderLooks()});
 $('#swatches').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b)return;S.colorOf[S.product]=+b.dataset.c;applyRoof();renderSwatches();updateQuote();renderLooks()});
-$('#styleGrid').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;W().style=b.dataset.s;renderStyles();syncCtls();rebuild()});
+$('#styleGrid').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;if(S.mode==='g3d'&&S.roofMode==='real'){S.roofMode='model';toast('Showing a modeled roof. Tap Real roof shape to go back.',4000)}W().style=b.dataset.s;renderStyles();syncCtls();rebuild();updateRecolor()});
+$('#realRoof').addEventListener('click',()=>{if(!S.scan)return;S.roofMode='real';renderStyles();rebuild();updateRecolor();toast('Real roof shape')});
 $('#wingSel').addEventListener('change',e=>selectWing(+e.target.value));
 $('#flipRidge').addEventListener('click',()=>{W().flip=!W().flip;rebuild()});
 $('#applyAll').addEventListener('click',()=>{const w=W();S.wings.forEach(x=>{x.style=w.style;x.pitch=w.pitch;x.ov=w.ov});rebuild();toast(`All sections set to ${w.style}, ${w.pitch}/12`)});
@@ -880,7 +911,7 @@ async function snapshot(){
 S.mode='lawn';applyRoof();applyWalls();applyTrim();sampleSite();updateG3dBtn();resize();buildHouse();fitView('orbit',true);refreshAll();requestAnimationFrame(loop);
 const qp=new URLSearchParams(location.search),qa=qp.get('a')||qp.get('address');
 if(qa&&!inViewer){$('#addr').value=qa;setTimeout(()=>loadAddress(qa),250)}
-window.__ridgeline={S,loadAddress,buildHouse,stats:()=>stats,fitView,selectWing,applyLook,tiles:()=>tiles,hitY,clip:()=>clipU.uCount.value,hasBuiltin};
+window.__ridgeline={rcOn:()=>rcU.uRcOn.value,S,loadAddress,buildHouse,stats:()=>stats,fitView,selectWing,applyLook,tiles:()=>tiles,hitY,clip:()=>clipU.uCount.value,hasBuiltin};
 })();
 </script>
 
