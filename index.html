@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ridgeline Studio</title>
-<meta name="ridgeline-build" content="g3d-reshingle-1">
+<meta name="ridgeline-build" content="g3d-reshingle-2">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -582,7 +582,7 @@ function fitView(kind,instant){
  let box=new THREE.Box3().setFromObject(house);if(box.isEmpty()&&S.wings.length){const b=wingBox(),hh=Math.max(6,...S.wings.map(w=>w.h+Math.min(w.l,w.w)/2*w.pitch/12)),r=b.r*.72;box=new THREE.Box3(new THREE.Vector3(b.cx-r,0,b.cz-r),new THREE.Vector3(b.cx+r,hh,b.cz+r))}
  const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),r=Math.max(kind==='top'?15:7,Math.hypot(sz.x,sz.z)/2+1.5);
  const vf=camera.fov*Math.PI/360,hf=Math.atan(Math.tan(vf)*camera.aspect),dist=r/Math.sin(Math.min(vf,hf))*.86;
- let az=.72,el=.36;if(kind==='top'){az=0;el=1.47}else if(kind==='front'){az=0;el=.2}
+ const fa=S.label&&S.frontAz!=null?S.frontAz:0;let az=fa+.72,el=.36;if(kind==='top'){az=fa;el=1.47}else if(kind==='front'){az=fa;el=S.mode==='g3d'?.42:.2}
  const tg=new THREE.Vector3(c.x,kind==='top'?0:sz.y*.36,c.z),pos=new THREE.Vector3(tg.x+dist*Math.cos(el)*Math.sin(az),tg.y+dist*Math.sin(el),tg.z+dist*Math.cos(el)*Math.cos(az));
  if(instant||reduceMotion){camera.position.copy(pos);controls.target.copy(tg);controls.update();tw=null}else tw={p0:camera.position.clone(),t0:controls.target.clone(),p1:pos,t1:tg,s:performance.now()};
  $$('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===kind)))}
@@ -615,19 +615,20 @@ function pip(x,z,p){let ins=false;for(let i=0,j=p.length-1;i<p.length;j=i++){con
 function segD(p,a,b){const dx=b[0]-a[0],dz=b[1]-a[1],L=dx*dx+dz*dz||1,t=clamp(((p[0]-a[0])*dx+(p[1]-a[1])*dz)/L,0,1);return Math.hypot(a[0]+t*dx-p[0],a[1]+t*dz-p[1])}
 const areaOf=p=>{let s=0;for(let i=0,j=p.length-1;i<p.length;j=i++)s+=(p[j][0]-p[i][0])*(p[j][1]+p[i][1]);return Math.abs(s/2)};
 async function footprint(lat,lon){
- const q=`[out:json][timeout:15];(way["building"](around:45,${lat},${lon});relation["building"](around:45,${lat},${lon}););out geom;`;let j=null;
+ const q=`[out:json][timeout:15];(way["building"](around:45,${lat},${lon});relation["building"](around:45,${lat},${lon});way["highway"~"^(residential|tertiary|secondary|primary|unclassified|living_street|trunk)$"](around:80,${lat},${lon}););out geom;`;let j=null;
  const ov=ep=>getJSON(ep+'?data='+encodeURIComponent(q),14000).then(r=>{if(!r||!r.elements||!r.elements.length)throw 0;return r});
  const api=()=>osmMap(lat,lon).then(r=>{if(!r.elements.length)throw 0;return r});
  try{j=await Promise.any([...['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'].map(ov),api()])}catch(e){}
  if(!j)return null;S.fpSrc=j.src||'overpass';let best=null,bd=1e9;
- for(const el of j.elements||[]){let g=el.geometry;if(el.type==='relation'){const m=(el.members||[]).find(m=>m.role==='outer'&&m.geometry);g=m&&m.geometry}if(!g||g.length<4)continue;
+ const HW=/^(residential|tertiary|secondary|primary|unclassified|living_street|trunk)$/,streets=[];
+ for(const el of j.elements||[]){if(el.tags&&el.tags.highway){if(HW.test(el.tags.highway)&&el.geometry&&el.geometry.length>1)streets.push(el.geometry.map(p=>toLocal(p.lat,p.lon,lat,lon)));continue}let g=el.geometry;if(el.type==='relation'){const m=(el.members||[]).find(m=>m.role==='outer'&&m.geometry);g=m&&m.geometry}if(!g||g.length<4)continue;
   const pts=g.map(p=>toLocal(p.lat,p.lon,lat,lon));const f=pts[0],l=pts[pts.length-1];if(Math.hypot(f[0]-l[0],f[1]-l[1])<.01)pts.pop();if(pts.length<3)continue;
   let d;if(pip(0,0,pts))d=-areaOf(pts);else{d=1e9;for(let i=0;i<pts.length;i++)d=Math.min(d,segD([0,0],pts[i],pts[(i+1)%pts.length]))}
   if(d<bd){bd=d;best={pts,tags:el.tags||{}}}}
- return best&&bd<25?best:null}
+ return best&&bd<25?Object.assign(best,{streets}):null}
 async function osmMap(lat,lon){const dy=.00055,dx=dy/Math.cos(lat*Math.PI/180),j=await getJSON(`https://api.openstreetmap.org/api/0.6/map.json?bbox=${(lon-dx).toFixed(6)},${(lat-dy).toFixed(6)},${(lon+dx).toFixed(6)},${(lat+dy).toFixed(6)}`,15000),nodes=new Map();
  for(const e of j.elements||[])if(e.type==='node')nodes.set(e.id,e);
- return{src:'osm-api',elements:(j.elements||[]).filter(e=>e.type==='way'&&e.tags&&e.tags.building&&e.nodes).map(w=>({type:'way',tags:w.tags,geometry:w.nodes.map(id=>nodes.get(id)).filter(Boolean).map(n=>({lat:n.lat,lon:n.lon}))}))}}
+ return{src:'osm-api',elements:(j.elements||[]).filter(e=>e.type==='way'&&e.tags&&(e.tags.building||e.tags.highway)&&e.nodes).map(w=>({type:'way',tags:w.tags,geometry:w.nodes.map(id=>nodes.get(id)).filter(Boolean).map(n=>({lat:n.lat,lon:n.lon}))}))}}
 function maxRect(g,nu,nv){const hg=new Int32Array(nu);let best=null;
  for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hg[i]=g[j*nu+i]?hg[i]+1:0;const st=[];
   for(let i=0;i<=nu;i++){const hh=i<nu?hg[i]:0;let start=i;while(st.length&&st[st.length-1][1]>=hh){const[si,sh]=st.pop(),A=sh*(i-si);if(sh>0&&(!best||A>best.A))best={A,i:si,w:i-si,j:j-sh+1,h:sh};start=si}st.push([start,hh])}}
@@ -671,7 +672,8 @@ async function loadAddress(q){
   toast('Loading the building outline…',0);let fp=null;try{fp=await footprint(geo.lat,geo.lon)}catch(e){}
   let wings=fp?toWings(fp.pts,fp.tags):null,note='';
   if(!wings||!wings.length){wings=[{name:'Main house',cx:0,cz:0,rot:0,l:12,w:9,h:5.6,style:'gable',pitch:6,ov:.4,door:'pz'}];note='No building outline on file here, so a standard house was placed. Adjust it under House.'}
-  wings.forEach(w=>w.base=true);S.wings=wings;S.sel=0;S.label=geo.label;S.photo=null;S.fp=!!fp;S.fpPts=fp?fp.pts:null;S.scanned=0;S.showCurrent=false;if(S.scan&&S.scan.mt)S.scan.mt.dispose();S.scan=null;S.roofMode='model';clearSite();stopTiles();let g3=false;
+  wings.forEach(w=>w.base=true);S.frontAz=null;if(fp&&fp.streets&&fp.streets.length){const c0=[wings[0].cx,wings[0].cz];let bd=1e9,bq=null;for(const Ls of fp.streets)for(let k=0;k<Ls.length-1;k++){const a=Ls[k],b=Ls[k+1],dx=b[0]-a[0],dz=b[1]-a[1],l2=dx*dx+dz*dz||1,t=clamp(((c0[0]-a[0])*dx+(c0[1]-a[1])*dz)/l2,0,1),qx=a[0]+t*dx,qz=a[1]+t*dz,d=Math.hypot(qx-c0[0],qz-c0[1]);if(d<bd){bd=d;bq=[qx,qz]}}if(bq&&bd<80)S.frontAz=Math.atan2(bq[0]-c0[0],bq[1]-c0[1])}
+  S.wings=wings;S.sel=0;S.label=geo.label;S.photo=null;S.fp=!!fp;S.fpPts=fp?fp.pts:null;S.scanned=0;S.showCurrent=false;if(S.scan){S.scan.mt&&S.scan.mt.dispose();S.scan.ht&&S.scan.ht.dispose()}S.scan=null;S.roofMode='model';clearSite();stopTiles();let g3=false;
   if(getKey()&&S.g3d!==false){toast('Loading Google 3D…',0);const r=await startTiles(geo.lat,geo.lon);
    if(r.ok){toast('Measuring the roof…',0);await fitToTiles();g3=true;S.ground='g3d';S.roofMode=S.scan?'real':'model';$('#attrib').hidden=false}
    else{setMode('sat');note=r.why==='auth'?'Google 3D didn’t accept your key, so this is the satellite view. Check the key under House → Google 3D key.':'Google 3D didn’t load, so this is the satellite view.'}}
@@ -688,7 +690,7 @@ const DBG=new URLSearchParams(location.search).has('debug'),BUILTIN_KEY='__RIDGE
 const DRACO='https://www.gstatic.com/draco/versioned/decoders/1.5.7/',D2R=Math.PI/180;
 const tilesRoot=new THREE.Group();tilesRoot.rotation.y=Math.PI;tilesRoot.visible=false;scene.add(tilesRoot);
 let tiles=null,attrT=0;const attribDefault=$('#attrib').textContent;
-const RC_DECL='uniform float uRcOn;uniform sampler2D uRcMask;uniform vec3 uRcXf;uniform sampler2D uRcTex;uniform vec2 uRcTile;uniform vec2 uRcAxis;uniform float uRcSin;uniform float uRcAvgL;uniform vec2 uRcY;';
+const RC_DECL='uniform float uRcOn;uniform sampler2D uRcMask;uniform vec3 uRcXf;uniform sampler2D uRcTex;uniform vec2 uRcTile;uniform vec2 uRcAxis;uniform float uRcSin;uniform float uRcAvgL;uniform vec2 uRcY;uniform sampler2D uRcH;';
 const RC_CODE=`
 if(uRcOn>0.5){
  vec3 rq=dFdx(vRLW),rw=dFdy(vRLW),nn=normalize(cross(rq,rw));if(nn.y<0.0)nn=-nn;
@@ -696,17 +698,17 @@ if(uRcOn>0.5){
  vec2 suv=vec2(dot(vRLW.xz,tt)/uRcTile.x,vRLW.y/uRcSin/uRcTile.y);
  vec2 sgx=vec2(dot(rq.xz,tt)/uRcTile.x,rq.y/uRcSin/uRcTile.y),sgy=vec2(dot(rw.xz,tt)/uRcTile.x,rw.y/uRcSin/uRcTile.y);
  vec3 shc=textureGrad(uRcTex,suv,sgx,sgy).rgb;
- vec2 mu=(vRLW.xz-uRcXf.xy)/uRcXf.z;float mk=texture(uRcMask,clamp(mu,0.0,1.0)).r;
+ vec2 mu=(vRLW.xz-uRcXf.xy)/uRcXf.z;float mk=texture(uRcMask,clamp(mu,0.0,1.0)).r,ht=texture(uRcH,clamp(mu,0.0,1.0)).r;
  float lum=uRcAvgL;
 #ifdef USE_MAP
  lum=dot(texture(map,vMapUv,3.0).rgb,vec3(0.2126,0.7152,0.0722));
 #endif
  vec3 sg=pow(max(diffuseColor.rgb,vec3(0.0)),vec3(0.4545));
- bool inside=mu.x>0.0&&mu.y>0.0&&mu.x<1.0&&mu.y<1.0&&mk>0.5&&vRLW.y>uRcY.x&&vRLW.y<uRcY.y&&nn.y>0.42&&!((2.0*sg.g-sg.r-sg.b)>0.09&&sg.g>sg.r);
- if(inside)diffuseColor.rgb=shc*mix(1.0,clamp(lum/uRcAvgL,0.3,1.7),0.85);
+ bool inside=mu.x>0.0&&mu.y>0.0&&mu.x<1.0&&mu.y<1.0&&mk>0.5&&vRLW.y>uRcY.x&&vRLW.y<uRcY.y&&vRLW.y>ht-0.8&&nn.y>0.6&&!((2.0*sg.g-sg.r-sg.b)>0.09&&sg.g>sg.r);
+ if(inside)diffuseColor.rgb=shc*1.1*mix(1.0,clamp(lum/uRcAvgL,0.3,1.7),0.85);
 }`;
-const rcU={uRcOn:{value:0},uRcMask:{value:null},uRcXf:{value:new THREE.Vector3()},uRcTex:{value:null},uRcTile:{value:new THREE.Vector2(1,1)},uRcAxis:{value:new THREE.Vector2(1,0)},uRcSin:{value:.45},uRcAvgL:{value:.3},uRcY:{value:new THREE.Vector2(0,100)}};
-function updateRecolor(){const sc=S.scan,on=S.mode==='g3d'&&S.roofMode==='real'&&!!sc&&!S.showCurrent;rcU.uRcOn.value=on?1:0;if(!sc)return;rcU.uRcMask.value=sc.mt;rcU.uRcXf.value.set(sc.x0,sc.z0,sc.size);rcU.uRcAxis.value.set(Math.cos(sc.ang),Math.sin(sc.ang));rcU.uRcSin.value=Math.max(.2,sc.sin||.45);rcU.uRcAvgL.value=Math.max(.02,sc.avgL);rcU.uRcY.value.set(sc.minY,sc.maxY)}
+const rcU={uRcOn:{value:0},uRcMask:{value:null},uRcXf:{value:new THREE.Vector3()},uRcTex:{value:null},uRcTile:{value:new THREE.Vector2(1,1)},uRcAxis:{value:new THREE.Vector2(1,0)},uRcSin:{value:.45},uRcAvgL:{value:.3},uRcY:{value:new THREE.Vector2(0,100)},uRcH:{value:null}};
+function updateRecolor(){const sc=S.scan,on=S.mode==='g3d'&&S.roofMode==='real'&&!!sc&&!S.showCurrent;rcU.uRcOn.value=on?1:0;if(!sc)return;rcU.uRcMask.value=sc.mt;rcU.uRcH.value=sc.ht;rcU.uRcXf.value.set(sc.x0,sc.z0,sc.size);rcU.uRcAxis.value.set(Math.cos(sc.ang),Math.sin(sc.ang));rcU.uRcSin.value=Math.max(.2,sc.sin||.45);rcU.uRcAvgL.value=Math.max(.02,sc.avgL);rcU.uRcY.value.set(sc.minY,sc.maxY)}
 const clipU={uRects:{value:Array.from({length:6},()=>new THREE.Vector4())},uDims:{value:Array.from({length:6},()=>new THREE.Vector4())},uCount:{value:0}};
 function patchMat(m){if(!m||m.userData.rl)return;m.userData.rl=1;m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,clipU,rcU);
  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vRLW;').replace('#include <begin_vertex>','#include <begin_vertex>\nvRLW=(modelMatrix*vec4(transformed,1.0)).xyz;');
@@ -762,7 +764,7 @@ function maskWings(sc,fp){
  const{H,C,N,cell,x0,z1}=sc,n=N*N,W=i=>[x0+(i%N+.5)*cell,z1-(((i/N)|0)+.5)*cell],vals=[];
  for(let i=0;i<n;i+=3)if(H[i]===H[i])vals.push(H[i]);if(vals.length<n/6)return null;vals.sort((a,b)=>a-b);
  const g0=vals[Math.floor(vals.length*.2)],lin=v=>255*Math.pow(v/255,1/2.2);
- let M=new Uint8Array(n);for(let i=0;i<n;i++){const h=H[i];if(!(h===h))continue;const r=lin(C[i*4]),g=lin(C[i*4+1]),b=lin(C[i*4+2]);M[i]=h-g0>2.3&&!(2*g-r-b>22&&g>r)?1:0}
+ let M=new Uint8Array(n);const veg=new Uint8Array(n);for(let i=0;i<n;i++){const h=H[i];if(!(h===h))continue;const r=lin(C[i*4]),g=lin(C[i*4+1]),b=lin(C[i*4+2]),vg=2*g-r-b>22&&g>r;veg[i]=vg?1:0;M[i]=h-g0>2.3&&!vg?1:0}
  M=morph(morph(M,N,1,0),N,1,1);M=morph(morph(M,N,2,1),N,2,0);
  const near=(p,d)=>{if(pip(p[0],p[1],fp))return true;for(let k=0;k<fp.length;k++)if(segD(p,fp[k],fp[(k+1)%fp.length])<d)return true;return false};
  const allow=fp?i=>near(W(i),2.5):i=>{const p=W(i);return Math.hypot(p[0],p[1])<22};
@@ -786,9 +788,11 @@ function maskWings(sc,fp){
   if(x>0&&y>0&&x<N-1&&y<N-1&&isC(i-1)&&isC(i+1)&&isC(i-N)&&isC(i+N)){const a1=H[i+1],a2=H[i-1],a3=H[i+N],a4=H[i-N];if(a1===a1&&a2===a2&&a3===a3&&a4===a4){const sl=Math.hypot((a1-a2)/(2*cell),(a3-a4)/(2*cell));facs.push(Math.min(2.2,Math.sqrt(1+sl*sl)));if(sl>.15&&sl<1.8)slopes.push(sl)}}}
  slopes.sort((p,q)=>p-q);ys.sort((p,q)=>p-q);const sl=slopes.length>facs.length*.25?slopes[slopes.length>>1]:0,mf=facs.length?facs.reduce((p,q)=>p+q,0)/facs.length:1.1;
  const dm=morph(comp,N,2,1),td=new Uint8Array(n);for(let r=0;r<N;r++)for(let k=0;k<N;k++)td[(N-1-r)*N+k]=dm[r*N+k]?255:0;
- if(S.scan&&S.scan.mt)S.scan.mt.dispose();
+ if(S.scan){S.scan.mt&&S.scan.mt.dispose();S.scan.ht&&S.scan.ht.dispose()}
  const mt=new THREE.DataTexture(td,N,N,THREE.RedFormat,THREE.UnsignedByteType);mt.magFilter=mt.minFilter=THREE.LinearFilter;mt.needsUpdate=true;
- S.scan={mt,x0,z0:z1-N*cell,size:N*cell,ang,sin:sl/Math.sqrt(1+sl*sl),pitch:Math.round(sl*24)/2,avgL:Ln?Ls/Ln:.3,minY:g0+1.8,maxY:(ys.length?ys[Math.floor(ys.length*.98)]:g0+12)+.6,area:area*mf,perim:edge.length*cell*.9};
+ const hd=new Float32Array(n);for(let r=0;r<N;r++)for(let k=0;k<N;k++){const i=r*N+k,h=H[i];hd[(N-1-r)*N+k]=(h===h&&!veg[i])?h:-100}
+ const ht=new THREE.DataTexture(hd,N,N,THREE.RedFormat,THREE.FloatType);ht.magFilter=ht.minFilter=THREE.NearestFilter;ht.needsUpdate=true;
+ S.scan={mt,ht,x0,z0:z1-N*cell,size:N*cell,ang,sin:sl/Math.sqrt(1+sl*sl),pitch:Math.round(sl*24)/2,avgL:Ln?Ls/Ln:.3,minY:g0+1.8,maxY:(ys.length?ys[Math.floor(ys.length*.98)]:g0+12)+.6,area:area*mf,perim:edge.length*cell*.9};
  return gridWings(grid,nu,nv,cs,u0,v0,c,s,ang,{hMain:5.7,tagStyle:null,area,ov:.15,minA:8})}
 function inOtherXZ(x,z,self){for(const o of S.wings){if(o===self)continue;const dx=x-o.cx,dz=z-o.cz,c=Math.cos(o.rot),s=Math.sin(o.rot),lx=dx*c-dz*s,lz=dx*s+dz*c;if(Math.abs(lx)<o.l/2&&Math.abs(lz)<o.w/2)return true}return false}
 function fitWing(w){
@@ -911,7 +915,7 @@ async function snapshot(){
 S.mode='lawn';applyRoof();applyWalls();applyTrim();sampleSite();updateG3dBtn();resize();buildHouse();fitView('orbit',true);refreshAll();requestAnimationFrame(loop);
 const qp=new URLSearchParams(location.search),qa=qp.get('a')||qp.get('address');
 if(qa&&!inViewer){$('#addr').value=qa;setTimeout(()=>loadAddress(qa),250)}
-window.__ridgeline={rcOn:()=>rcU.uRcOn.value,S,loadAddress,buildHouse,stats:()=>stats,fitView,selectWing,applyLook,tiles:()=>tiles,hitY,clip:()=>clipU.uCount.value,hasBuiltin};
+window.__ridgeline={rcOn:()=>rcU.uRcOn.value,frontAz:()=>S.frontAz,S,loadAddress,buildHouse,stats:()=>stats,fitView,selectWing,applyLook,tiles:()=>tiles,hitY,clip:()=>clipU.uCount.value,hasBuiltin};
 })();
 </script>
 
